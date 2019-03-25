@@ -1,10 +1,10 @@
 ..\obj\osal_memory.o: ..\BSP\OSAL_Memory.c
-..\obj\osal_memory.o: C:\Keil\ARM\ARMCC\bin\..\include\string.h
+..\obj\osal_memory.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
 ..\obj\osal_memory.o: ..\uCOS-II\Source\ucos_ii.h
 ..\obj\osal_memory.o: ..\USER\app_cfg.h
 ..\obj\osal_memory.o: ..\USER\stm32f4xx.h
 ..\obj\osal_memory.o: ..\CORE\core_cm4.h
-..\obj\osal_memory.o: C:\Keil\ARM\ARMCC\bin\..\include\stdint.h
+..\obj\osal_memory.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
 ..\obj\osal_memory.o: ..\CORE\core_cmInstr.h
 ..\obj\osal_memory.o: ..\CORE\core_cmFunc.h
 ..\obj\osal_memory.o: ..\CORE\core_cm4_simd.h

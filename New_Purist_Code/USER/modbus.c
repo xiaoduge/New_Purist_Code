@@ -29,7 +29,11 @@
 
 #include "ad7799.h"
 
-#define MAX_TADC_VALUE (0XFFF << ADC_Additional_Bits)
+#include <math.h>
+
+
+
+#define MAX_TADC_VALUE ((1 << (12 + ADC_Additional_Bits)) - 1)
 #define RREF_RESISTENCE (10000)
 
 #define MODBUS_ADR_POS (0)
@@ -128,7 +132,15 @@ unsigned char RD_mode;
 /* add according to Lefeng Brother Little Du */
 #define OR2CAL 64                      
 #define OR1CAL 66                      
-#define OR3CAL 67                      
+#define OR3CAL 67    
+
+//2019.01.22 Add
+#define SAFE
+const float maxG25 = 18.2;
+const float safePar = 1.05;
+#define B3950
+
+
 
 #pragma   pack(1)
 
@@ -267,7 +279,7 @@ unsigned char  *ch3_data_addr = (unsigned char *)&ch3_data; /*_at_ 0x002c*/;
 #define  rx3_dbg    ch3_dbg_data.s.rx                        
 #define  tx3_dbg    ch3_dbg_data.s.tx                        
 
-
+#if 0
 uint16_t RT10k [] = {
 44626,42326,40159,38115,36187,34367,32650,  //-6~0
 31029,29498,28051,26684,25391,24168,23011,21916,20880,19898,  //1-10
@@ -281,8 +293,46 @@ uint16_t RT10k [] = {
 1215,1177,1140,1104,1070,1037,1005,974,944,915,     //81-90
 888,861,835,810,786,763,741,719,699,679             //90-100
 };
+#endif
+
+//20190115
+uint16_t RT10k [] = {
+43450, 41306, 39274, 37349, 35524, 33795, 32116,                        //-6-0
+30601, 29128, 27732, 26408, 25152, 23962, 22833, 21762, 20746, 19783,   //1-10
+18868, 18000, 17177, 16395, 15652, 14947, 14277, 13641, 13036, 12461,  //11-20
+11915, 11395, 10901, 10431, 10000, 9557,  9151,  8765,  8397,  8047,   //21-30
+7712,  7394,  7090,  6800,  6523,  6259,  6008,  5767,  5537,  5318,   //31-40
+5108,  4907,  4716,  4532,  4357,  4189,  4029,  3875,  3728,  3588,   //41-50
+3453,  3324,  3200,  3081,  2968,  2859,  2754,  2654,  2558,  2466,   //51-60
+2377,  2293,  2211,  2133,  2058,  1986,  1917,  1850,  1786,  1725,   //61-70
+1666,  1610,  1555,  1503,  1452,  1404,  1358,  1313,  1270,  1228,   //71-80
+1189,  1150,  1113,  1078,  1044,  1011,  979,   948,   919,   890,    //81-90
+863,   837,   811,   787,   763,   740,   718,   697,   676,   657,    //91-100
+};
+
 
 void HEXto_SendReg(uint8_t ch);
+
+#if 0
+void setTOffset(int ichl, UINT32 offset)
+{
+	unsigned short temp = offset/100;
+	switch (ichl)
+	{
+	case 0:
+		t1offset = temp;
+		break;
+	case 1:
+		t2offset = temp;
+		break;
+	case 2:
+		t3offset = temp;
+		break;
+	default:
+		break;
+	}
+}
+#endif
 
 uint16_t get_trx(int Rx) 
 {
@@ -302,9 +352,32 @@ uint16_t get_trx(int Rx)
   return (tx = 1001);
 }
 
+//old PURIST A+ T Calc
+int ex_get_tx(int ADx,uint16_t RTRef)
+{
+	uint32_t Rtx;
+    double tmp;
+    int tx;
+    Rtx = (long)ADx*RTRef/(MAX_TADC_VALUE-ADx);  
+    if(Rtx > 32650)    tmp = 0;    /* ylf: minus 100 celsius */
+    else if(Rtx < 679) tmp = 100;  /* ylf: 100 celsius */
+	else
+	{
+#ifdef B3950
+		tmp = 3950 / ((3950/298.15) + log(Rtx) - log(10000)) - 273.15;//T Calc
+#else
+		tmp = 3984 / ((3984/298.15) + log(Rtx) - log(10000)) - 273.15;//T Calc
+#endif
+	}
+	
+    tx=(int)(tmp*10);
+	
+    return(tx);
+}
+
 int get_tx(int ADx,uint16_t RTRef)
 {
-    uint16_t Rtx;
+    uint32_t Rtx;
     int tmp;
     int tx;
     Rtx = (long)ADx*RTRef/(MAX_TADC_VALUE-ADx);  
@@ -491,7 +564,8 @@ void get_c12_proc()
                 ch1_sw=1;     
                 work_mode=C1HR_mode;
             }
-            RD_mode=RVRH1CAL;               
+            RD_mode=RVRH1CAL; 
+            ent_flg = 1;
         }break;         
     case 0x8283:                                
         {
@@ -501,6 +575,7 @@ void get_c12_proc()
                 work_mode=C1HH_mode;
             }
             RD_mode=RC1HHCAL;               
+            ent_flg = 1;
         }break;                                                             
     case 0x8485:                                
         {
@@ -511,6 +586,7 @@ void get_c12_proc()
                 work_mode=C1HL_mode;
             }
             RD_mode=RC1HLCAL;               
+            ent_flg = 1;
         }break;
     case 0x8687:
         {
@@ -521,6 +597,7 @@ void get_c12_proc()
                 work_mode=C1LH_mode;
             }
             RD_mode=RC1LHCAL;               
+            ent_flg = 1;
         }break;         
     case 0x8889:                                
         {
@@ -530,6 +607,7 @@ void get_c12_proc()
                 work_mode=C1LL_mode;
             }
             RD_mode=RC1LLCAL;               
+            ent_flg = 1;
         }break;
     case 0x8a8b:                                
         {
@@ -539,6 +617,7 @@ void get_c12_proc()
                 work_mode=C1LR_mode;
             }
             RD_mode=RVRL1CAL;               
+            ent_flg = 1;
         }break;
     case 0x8c8d:RD_mode=RDC1_OFS;break;  /* read parameter (0x03e8) */
     case 0x8e8f:RD_mode=RDC1_CON;break;  /* read parameter */
@@ -635,6 +714,7 @@ void get_c22_proc()
                     work_mode = C2HR_mode;
                 }
                 RD_mode=RVRH2CAL;                       
+                ent_flg = 1;
             }break;
         case 0x9293:                                        
             {
@@ -644,6 +724,7 @@ void get_c22_proc()
                     work_mode=C2HH_mode;
                 }
                 RD_mode=RC2HHCAL;                       
+                ent_flg = 1;
             }break;
         case 0x9495:                                        
             {
@@ -653,6 +734,7 @@ void get_c22_proc()
                     work_mode=C2HL_mode;
                 }
                 RD_mode=RC2HLCAL;                       
+                ent_flg = 1;
             }break;
         case 0x9697:                                        
             {
@@ -662,6 +744,7 @@ void get_c22_proc()
                     work_mode=C2LH_mode;
                 }
                 RD_mode=RC2LHCAL;                       
+                ent_flg = 1;
             }break;
         case 0x9899:                                        
             {
@@ -671,6 +754,7 @@ void get_c22_proc()
                     work_mode=C2LL_mode;
                 }
                 RD_mode=RC2LLCAL;                       
+                ent_flg = 1;
             }break;
         case 0x9a9b:                                        
             {
@@ -680,6 +764,7 @@ void get_c22_proc()
                     work_mode=C2LR_mode;
                 }
                 RD_mode=RVRL2CAL;                       
+                ent_flg = 1;
             }break;
         case 0x9c9d:RD_mode=RDC2_OFS;break;
         case 0x9e9f:RD_mode=RDC2_CON;break;
@@ -690,6 +775,7 @@ void get_c22_proc()
                     work_mode=C2RT_mode;
                 }
                 RD_mode=RC2RTCAL;                               
+                ent_flg = 1;
             }break;
         case 0x000e:RD_mode=OR2MEDAT;break; 
         case 0x000f:RD_mode=OR2CAL;debug_range_flg = 1; break; 
@@ -776,6 +862,7 @@ void get_c32_proc()
                     work_mode=C3HR_mode;
                 }
                 RD_mode=RVRH3CAL;                               
+                ent_flg = 1;
             }break;         
         case 0xa2a3:                                                
             {
@@ -785,6 +872,7 @@ void get_c32_proc()
                     work_mode=C3HH_mode;
                 }
                 RD_mode=RC3HHCAL;                                   
+                ent_flg = 1;
             }break;                                                             
         case 0xa4a5:                                                    
             {
@@ -794,6 +882,7 @@ void get_c32_proc()
                     work_mode=C3HL_mode;
                 }
                 RD_mode=RC3HLCAL;                                   
+                ent_flg = 1;
             }break;
         case 0xa6a7:                                                    
             {
@@ -803,6 +892,7 @@ void get_c32_proc()
                     work_mode=C3LH_mode;
                 }
                 RD_mode=RC3LHCAL;                                   
+                ent_flg = 1;
             }break;         
         case 0xa8a9:                                                    
             {
@@ -812,6 +902,7 @@ void get_c32_proc()
                     work_mode=C3LL_mode;
                 }
                 RD_mode=RC3LLCAL;                                   
+                ent_flg = 1;
             }break;
         case 0xaaab:                                                    
             {
@@ -821,6 +912,7 @@ void get_c32_proc()
                     work_mode=C3LR_mode;
                 }
                 RD_mode=RVRL3CAL;                                   
+                ent_flg = 1;
             }break;
         case 0xacad:RD_mode=RDC3_OFS;break;     
         case 0xaeaf:RD_mode=RDC3_CON;break;     
@@ -964,24 +1056,14 @@ int ad_mean(uint8_t ch)
 {
    return  GetAdcData(ch);
 }
-void ch1_meas_proc_Inner(float *c,float *t)
+void ch1_meas_proc_Inner(float *c, float *t, uint16_t *Rt)
 {
     uint16_t Rx;
     t1addat=ad_mean(T1_ch);
-    c1addat=get_c1addat();
+    c1addat=get_c1addat();	
+    //tx1=get_tx(t1addat,RT1Ref)+t1offset;
+	tx1= ex_get_tx(t1addat,RT1Ref) + t1offset;
 	
-	/*
-	UartCmdPrintf(VOS_LOG_DEBUG,"c1addat:%d \n", c1addat);
-	UartCmdPrintf(VOS_LOG_DEBUG,"ch1HVR:%d \n", ch1HVR);
-	UartCmdPrintf(VOS_LOG_DEBUG,"ch1HH:%d \n", ch1HH);
-	UartCmdPrintf(VOS_LOG_DEBUG,"ch1HL:%d \n", ch1HL);
-	UartCmdPrintf(VOS_LOG_DEBUG,"ch1LH:%d \n", ch1LH);
-	UartCmdPrintf(VOS_LOG_DEBUG,"ch1LL:%d \n", ch1LL);
-	UartCmdPrintf(VOS_LOG_DEBUG,"ch1LVR:%d \n", ch1LVR);
-	UartCmdPrintf(VOS_LOG_DEBUG,"const1:%d \n", const1);
-	*/	
-	
-    tx1=get_tx(t1addat,RT1Ref)+t1offset;
     get_Kcoef_Kp((float)tx1/10);
     if(ch1_Range_flg)
     {
@@ -1005,19 +1087,28 @@ void ch1_meas_proc_Inner(float *c,float *t)
             tdelay(200);
         }
     }
+	
+#ifdef SAFE
+	R25x1 *= safePar;
+	if(R25x1 > maxG25)
+	{
+		R25x1 = 18.2;
+	}
+#endif
 
     if (c) *c = R25x1;
     if (t) *t = tx1;
+	if (Rt) *Rt = (long)t1addat*RT1Ref/(MAX_TADC_VALUE-t1addat);
     
 }
 
 void ch2_meas_proc_Inner(float *c,float *t)
 {
     uint16_t Rx;
-    t2addat=ad_mean(T2_ch);
+   // t2addat=ad_mean(T2_ch);
     c2addat=get_c2addat();  
-    tx2=get_tx(t2addat,RT2Ref)+t2offset;        
-
+   // tx2=get_tx(t2addat,RT2Ref)+t2offset; 
+	tx2 = tx1;
     if(ch2_Range_flg)                                                   
     {
         Rx=getRx_proc(c2addat,ch2HH,ch2HVR);    /* satisfy : ch2HH(10k) < ch2HL < ch2HVR */
@@ -1043,15 +1134,17 @@ void ch2_meas_proc_Inner(float *c,float *t)
     
     if (c) *c = G25x2;
     if (t) *t = tx2;
+
 }
 
 
 void ch3_meas_proc_Inner(float *c,float *t)
 {
     uint16_t Rx;
-    t3addat=ad_mean(T3_ch);
+    //t3addat=ad_mean(T3_ch);
     c3addat=get_c3addat();
-    tx3=get_tx(t3addat,RT3Ref)+t3offset;
+    //tx3=get_tx(t3addat,RT3Ref)+t3offset;
+	tx3 = tx1;
     get_Kcoef_Kp((float)tx3/10);
     if(ch3_Range_flg)
     {
@@ -1082,7 +1175,7 @@ void ch3_meas_proc_Inner(float *c,float *t)
 
 void ch1_meas_proc()
 {
-    ch1_meas_proc_Inner(NULL,NULL);
+    ch1_meas_proc_Inner(NULL,NULL,NULL);
 }
 
 
@@ -1715,6 +1808,38 @@ void ModbusInit(void)
    
        SerialInitPort(ucPortIdx);   
    }
+
+   
+	//VOS_LOG(VOS_LOG_DEBUG,"c1addat:%d \n", c1addat);
+	VOS_LOG(VOS_LOG_DEBUG,"ch1HVR:%d \n", ch1HVR);
+	VOS_LOG(VOS_LOG_DEBUG,"ch1HH:%d \n", ch1HH);
+	VOS_LOG(VOS_LOG_DEBUG,"ch1HL:%d \n", ch1HL);
+	VOS_LOG(VOS_LOG_DEBUG,"ch1LH:%d \n", ch1LH);
+	VOS_LOG(VOS_LOG_DEBUG,"ch1LL:%d \n", ch1LL);
+	VOS_LOG(VOS_LOG_DEBUG,"ch1LVR:%d \n", ch1LVR);
+	VOS_LOG(VOS_LOG_DEBUG,"const1:%d \n", const1);
+	VOS_LOG(VOS_LOG_DEBUG,"t1offset:%d \n", t1offset);
+
+	//VOS_LOG(VOS_LOG_DEBUG,"c2addat:%d \n", c2addat);
+	VOS_LOG(VOS_LOG_DEBUG,"ch2HVR:%d \n", ch2HVR);
+	VOS_LOG(VOS_LOG_DEBUG,"ch2HH:%d \n", ch2HH);
+	VOS_LOG(VOS_LOG_DEBUG,"ch2HL:%d \n", ch2HL);
+	VOS_LOG(VOS_LOG_DEBUG,"ch2LH:%d \n", ch2LH);
+	VOS_LOG(VOS_LOG_DEBUG,"ch2LL:%d \n", ch2LL);
+	VOS_LOG(VOS_LOG_DEBUG,"ch2LVR:%d \n", ch2LVR);
+	VOS_LOG(VOS_LOG_DEBUG,"const2:%d \n", const2);
+	VOS_LOG(VOS_LOG_DEBUG,"t2offset:%d \n", t2offset);
+
+	//VOS_LOG(VOS_LOG_DEBUG,"c3addat:%d \n", c3addat);
+	VOS_LOG(VOS_LOG_DEBUG,"ch3HVR:%d \n", ch3HVR);
+	VOS_LOG(VOS_LOG_DEBUG,"ch3HH:%d \n", ch3HH);
+	VOS_LOG(VOS_LOG_DEBUG,"ch3HL:%d \n", ch3HL);
+	VOS_LOG(VOS_LOG_DEBUG,"ch3LH:%d \n", ch3LH);
+	VOS_LOG(VOS_LOG_DEBUG,"ch3LL:%d \n", ch3LL);
+	VOS_LOG(VOS_LOG_DEBUG,"ch3LVR:%d \n", ch3LVR);
+	VOS_LOG(VOS_LOG_DEBUG,"const3:%d \n", const3);
+	VOS_LOG(VOS_LOG_DEBUG,"t3offset:%d \n", t3offset);
+	
 }
 
 

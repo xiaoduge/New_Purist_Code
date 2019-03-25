@@ -69,8 +69,8 @@ typedef enum
 #define CMD_HOST2CLIENT_MOTOR_CTRL 0xFA        // Pulse Oximeter Command
 #define CMD_HOST2CLIENT_CAN_CTRL 0xFB        // local simulating can testing
 #define CMD_HOST2CLIENT_RS485_CTRL 0xFD // ird configuration bin downloading
-        #define CMD_CMD_HOST2CLIENT_RS485_CTRL_SEND 0
-        #define CMD_CMD_HOST2CLIENT_RS485_CTRL_GET  1
+#define CMD_CMD_HOST2CLIENT_RS485_CTRL_SEND 0
+#define CMD_CMD_HOST2CLIENT_RS485_CTRL_GET  1
 
 #define CMD_HOST2CLIENT_PARAMETER_SET 0xD0        // 
 #define CMD_HOST2CLIENT_PARAMETER_GET 0xD1        // 
@@ -142,6 +142,10 @@ typedef struct
     UINT16 FILTERLIFE; //过滤器寿命 :0~999DAYS
     UINT16 UNIT;       // MΩ.cm&μs/cm
     UINT16 FLOW;       //流速 0~9.99  (2 decimal)
+    UINT16 FEED_KEY;   //进水电导显示开关
+    UINT16 SENSOR_CFG_KEY;
+    UINT16 TOC_SHOW;   //TOC显示开关
+    UINT16 TOC_FUN;    //是否启动TOC检测
     UINT16 usRsv;
 }LOCAL_CONFIG2_STRU;
 

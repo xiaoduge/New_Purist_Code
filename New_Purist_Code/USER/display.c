@@ -45,6 +45,8 @@
 #include "ble.h"
 
 #include "modbus.h"
+
+#include "tocData.h"
 //#define TOC
 
 #define SENSOR_COORD_X (90)
@@ -80,6 +82,9 @@
 #define DISP_UF_TOP (SHOW_COORD_Y)
 
 #define TOC_MEAS_PERIOD (100)
+//导通3采样周期设定
+//#define TOC_MEAS_PERIOD ((Display.cfg.cfg3.usTocWashTime+Display.cfg.cfg3.usTocOxiTime)*1000)
+#define TOC_DELAY_SAMPLE ((Display.cfg.cfg3.usTocWashTime+Display.cfg.cfg3.usTocOxiTime-2)*1000)
 
 #define DISP_MAX_DISP_COL_OFFSET (10)
 
@@ -130,6 +135,8 @@
 
 #define DISP_ALARM_DURATION_TIME (3*60)
 
+#define DISP_TOC_ALARM_DURATION_TIME (10)
+
 #ifndef DISP_UF_TEST
 #define DISP_IDLE_WASH_PERIOD (30*60)
 #else
@@ -142,6 +149,16 @@
 
 #define UNIT_TYPE_0 "MΩ.cm"
 #define UNIT_TYPE_1 "μS/cm"
+
+#define SENSOR_ENG_OFF "OFF"
+#define SENSOR_ENG_FEED "FEED"
+#define SENSOR_ENG_TOC  "TOC"
+#define SENSOR_ENG_ON "FEED/TOC"
+
+#define SENSOR_CH_OFF "关"
+#define SENSOR_CH_FEED "进水"
+#define SENSOR_CH_TOC  "TOC"
+#define SENSOR_CH_ON "进水/TOC"
 
 #define TANK_VALID (0)
 
@@ -170,6 +187,11 @@ static tm stimer4Us;
 static tm sLastUpdateTime;
 
 DISPLAY_STRU Display;
+
+int key_toc; //toc过程时，跳出取水用20160930
+int key_em;
+static int TOC_Exception = 0; //0
+
 
 const int SensorMask4State[DISPLAY_STATE_BUTT] = {0,5,7,7,0,5,5,0};
 
@@ -240,6 +262,8 @@ void Disp_UserUpdate4FeedQuality(void);
 
 void Disp_Prepare4Qtw(void);
 
+void Disp_Set_Cirtime(void); //20170911添加
+
 extern void Att_value_split(char *parg,char sep);
 
 void Disp_SelectFont(FONT_STRU *ft)
@@ -296,6 +320,13 @@ void Disp_atof(char *s,UINT32 *value,UINT32 delimit)
   *     @arg DISPLAY_STATE_ENUM
   * @retval None
   */
+
+/*
+STM32F4_VALVE2_24V_EN  取水阀
+STM32F4_VALVE1_24V_EN  循环阀
+STM32F4_VALVE3_24V_EN  进水阀
+STM32F4_VALVE4_24V_EN  清洗阀
+*/
 void Disp_ValveCtrl(STATE_STRU *state)
 {
    switch(state->ucMain)
@@ -331,7 +362,8 @@ void Disp_ValveCtrl(STATE_STRU *state)
        RelayLogicCtrl(STM32F4_LAMP_24V_EN,TRUE);
        RelayLogicCtrl(STM32F4_PUMP_24V_EN,TRUE);
        // ADD FOR V2
-       RelayLogicCtrl(STM32F4_VALVE4_24V_EN,FALSE);
+       //RelayLogicCtrl(STM32F4_VALVE4_24V_EN,FALSE);
+       RelayLogicCtrl(STM32F4_VALVE4_24V_EN, TRUE);
        break;
    case DISPLAY_STATE_NORMAL_TAKING_WATER:
        RelayLogicCtrl(STM32F4_VALVE3_24V_EN,TRUE);
@@ -340,7 +372,8 @@ void Disp_ValveCtrl(STATE_STRU *state)
        RelayLogicCtrl(STM32F4_LAMP_24V_EN,TRUE);
        RelayLogicCtrl(STM32F4_PUMP_24V_EN,TRUE);
        // ADD FOR V2
-       RelayLogicCtrl(STM32F4_VALVE4_24V_EN,FALSE);
+       //RelayLogicCtrl(STM32F4_VALVE4_24V_EN,FALSE);
+       RelayLogicCtrl(STM32F4_VALVE4_24V_EN, TRUE);
        break;
    case DISPLAY_STATE_DECOMPRESSION:
        RelayLogicCtrl(STM32F4_VALVE3_24V_EN,FALSE);
@@ -358,7 +391,8 @@ void Disp_ValveCtrl(STATE_STRU *state)
        RelayLogicCtrl(STM32F4_LAMP_24V_EN,TRUE);
        RelayLogicCtrl(STM32F4_PUMP_24V_EN,TRUE);
        // ADD FOR V2
-       RelayLogicCtrl(STM32F4_VALVE4_24V_EN,FALSE);
+       //RelayLogicCtrl(STM32F4_VALVE4_24V_EN,FALSE);
+       RelayLogicCtrl(STM32F4_VALVE4_24V_EN, TRUE);
        break;
     // ADD FOR V2
     case DISPLAY_STATE_TOC:
@@ -370,7 +404,8 @@ void Disp_ValveCtrl(STATE_STRU *state)
             RelayLogicCtrl(STM32F4_VALVE2_24V_EN,FALSE);
             RelayLogicCtrl(STM32F4_LAMP_24V_EN,FALSE);
             RelayLogicCtrl(STM32F4_PUMP_24V_EN,TRUE);
-            RelayLogicCtrl(STM32F4_VALVE4_24V_EN,FALSE);
+            //RelayLogicCtrl(STM32F4_VALVE4_24V_EN,FALSE);
+			RelayLogicCtrl(STM32F4_VALVE4_24V_EN, TRUE);
             break;
         case DISPLAY_SUB_STATE_TOC_OXIDATION:
             RelayLogicCtrl(STM32F4_VALVE3_24V_EN,FALSE);
@@ -378,7 +413,8 @@ void Disp_ValveCtrl(STATE_STRU *state)
             RelayLogicCtrl(STM32F4_VALVE2_24V_EN,FALSE);
             RelayLogicCtrl(STM32F4_LAMP_24V_EN,TRUE);
             RelayLogicCtrl(STM32F4_PUMP_24V_EN,TRUE);
-            RelayLogicCtrl(STM32F4_VALVE4_24V_EN,TRUE);
+            //RelayLogicCtrl(STM32F4_VALVE4_24V_EN,TRUE);
+            RelayLogicCtrl(STM32F4_VALVE4_24V_EN, FALSE);
             break;
         default:
             RelayLogicCtrl(STM32F4_VALVE3_24V_EN,FALSE);
@@ -386,7 +422,8 @@ void Disp_ValveCtrl(STATE_STRU *state)
             RelayLogicCtrl(STM32F4_VALVE2_24V_EN,FALSE);
             RelayLogicCtrl(STM32F4_LAMP_24V_EN,FALSE);
             RelayLogicCtrl(STM32F4_PUMP_24V_EN,FALSE);
-            RelayLogicCtrl(STM32F4_VALVE4_24V_EN,FALSE);
+            //RelayLogicCtrl(STM32F4_VALVE4_24V_EN,FALSE);
+            RelayLogicCtrl(STM32F4_VALVE4_24V_EN, TRUE);
             break;
         }
         break;
@@ -638,6 +675,51 @@ void Disp_Int2floatFormat(int value,int integer,int decimal,char *buf)
 
 }
 
+void Disp_Int2floatFormat_toc(int value,int integer,int decimal,char *buf)
+{
+    int divid = 1;
+    int len = 0;
+    int value1,value2;
+    static uint8_t tmpBuf[32];
+
+    for (value1 = 0; value1 < decimal; value1++)
+    {
+        divid *= 10;
+    }
+
+    value1 = value/divid; // get integer part
+
+    value2 = value%divid;  // get decimal part
+
+    
+    do{
+        tmpBuf[len++] = value1%10 + '0';
+        value1 /= 10;
+    }while(value1 > 0);
+    
+    for (value1 = len; value1 < integer; value1++)
+    {
+        tmpBuf[len++] = ' ';
+    }
+
+    // now reverse
+    for (value1 = 0; value1 < len; value1++)
+    {
+        buf[value1] = tmpBuf[len - 1 - value1];
+    }
+
+   // buf[len++] = '.';
+
+    for (value = 0; value < decimal; value++)
+    {
+        divid /= 10;
+        buf[len++] = '0' + (value2/divid);
+        value2 %= divid;
+    }
+    buf[len] = 0;   
+
+}
+
 
 void Disp_Int2float(int value,char *buf)
 {
@@ -681,12 +763,13 @@ void Disp_CheckConsumptiveMaterialState(void)
         {
             ulTemp = (ulCurTime - Display.info.PACKLIFEDAY)/DISP_DAYININSECOND;
 
-
-            if (ulTemp >= Display.cfg.cfg2.PACKLIFEDAY)
+            if ((ulTemp >= Display.cfg.cfg2.PACKLIFEDAY)
+				&&(Display.cfg.cfg2.PACKLIFEDAY != 0))
             {
                 Display.bit1PackCheck = TRUE;
             }
-            if (Display.info.PACKLIFEL >= Display.cfg.cfg2.PACKLIFEL)
+            if ((Display.info.PACKLIFEL >= Display.cfg.cfg2.PACKLIFEL)
+				&&(Display.cfg.cfg2.PACKLIFEL != 0))
             {
                 Display.bit1PackCheck = TRUE;
             }
@@ -697,12 +780,14 @@ void Disp_CheckConsumptiveMaterialState(void)
         {
             ulTemp = (ulCurTime - Display.info.UVLIFEDAY)/DISP_DAYININSECOND;
 
-            if (ulTemp >= Display.cfg.cfg2.UVLIFEDAY)
+            if ((ulTemp >= Display.cfg.cfg2.UVLIFEDAY)
+				&&(Display.cfg.cfg2.UVLIFEDAY != 0))
             {
                 Display.bit1UVCheck = TRUE;
             }
             
-            if (Display.info.UVLIFEHOUR >= Display.cfg.cfg2.UVLIFEHOUR*(3600/UV_PFM_PEROID))
+            if ((Display.info.UVLIFEHOUR >= Display.cfg.cfg2.UVLIFEHOUR*(3600/UV_PFM_PEROID))
+				&&(Display.cfg.cfg2.UVLIFEHOUR*(3600/UV_PFM_PEROID) != 0))
             {
                 Display.bit1UVCheck = TRUE;
             }
@@ -714,9 +799,9 @@ void Disp_CheckConsumptiveMaterialState(void)
     if (ulCurTime > Display.info.FILTERLIFE)
     {
         ulTemp = (ulCurTime - Display.info.FILTERLIFE)/DISP_DAYININSECOND;
-    
-    
-        if (ulTemp >= Display.cfg.cfg2.FILTERLIFE)
+
+        if ((ulTemp >= Display.cfg.cfg2.FILTERLIFE)
+			&&(Display.cfg.cfg2.FILTERLIFE != 0))
         {
             Display.bit1FilterCheck = TRUE;
         }
@@ -883,27 +968,205 @@ void Disp_Move2DstPage(void)
 
 }
 
+#if 0
+void Disp_Calc_TOC(float value, int iChl)
+{
+	static int count_p; //用于计数
+	static float temp_sum_p;
+	static float temp_average_p;
+
+	if(iChl != 2)
+	{
+		return;
+	}
+
+	if(Display.spec.toc.ucIdx == 2)
+	{
+		count_p=0;temp_sum_p=0;temp_average_p=0;
+		VOS_LOG(VOS_LOG_DEBUG,"Ochl:%d : Res:%f  \n", iChl+1, value);
+	}
+	
+	if(Display.spec.toc.ucIdx == 3)
+	{
+		VOS_LOG(VOS_LOG_DEBUG,"Fchl:%d : Res:%f  \n", iChl+1, value);
+		count_p++;
+		
+		if(count_p > 5 && count_p <= 20)  //
+		{
+			temp_sum_p += value;
+		}
+		
+		if(count_p==21)
+		{
+			temp_average_p = temp_sum_p/(count_p - 10);			          
+			if(temp_average_p < 2.5f)
+			{
+				Display.iToc = -315.5*pow(temp_average_p, 3) + 2041*pow(temp_average_p, 2) - 4404*(temp_average_p) + 3195;
+			}
+			
+			else
+			{
+				Display.iToc = -29.14 * log(temp_average_p) + 42;
+			}
+			
+			if(Display.iToc < 2)
+			{
+				Display.iToc = 2;
+			}
+
+			Display.iToc *= Display.cfg.cfg1.CELLCONSTANT[2];
+
+        }
+				      
+	}
+
+}
+#endif
+
+void Disp_Calc_TOC(float value, int iChl)
+{
+	static TocData tocDatas;
+	static int isInit;
+
+	if(iChl != 2)
+	{
+		return;
+	}
+
+	if(Display.spec.toc.ucIdx == 2)
+	{
+		isInit = 1;
+		
+		VOS_LOG(VOS_LOG_DEBUG,"O chl:%d : Res:%f  \n", iChl+1, value);
+	}
+	
+	if(Display.spec.toc.ucIdx == 3)
+	{
+		VOS_LOG(VOS_LOG_DEBUG,"F chl:%d : Res:%f  \n", iChl+1, value);		
+		
+		if(isInit)
+		{
+			addTocData(&tocDatas, value);
+		}
+		
+		if(tocDatas.isFull)
+		{
+			double tempValue = calcValue(tocDatas);	          
+			VOS_LOG(VOS_LOG_DEBUG,"TOC Value: %f  \n", tempValue);
+			if(tempValue < 2.5f)
+			{
+				Display.iToc = -315.5*pow(tempValue, 3) + 2041*pow(tempValue, 2) - 4404*(tempValue) + 3195;
+			}
+			
+			else
+			{
+				Display.iToc = -29.14 * log(tempValue) + 42;
+			}
+			
+			if(Display.iToc < 2)
+			{
+				Display.iToc = 2;
+			}
+
+			Display.iToc *= Display.cfg.cfg1.CELLCONSTANT[2];
+
+			memset(&tocDatas, 0, sizeof(TocData)); //計算完成后清零
+			isInit = 0;
+
+        }
+				      
+	}
+
+}
+
+void Disp_Calc_TocValue(float value, int iChl)
+{
+	static TocValues tocValues;
+	static int isInit;
+	static int samplesNum;
+	
+	if(iChl != 2)
+	{
+		return;
+	}
+
+	if(Display.spec.toc.ucIdx == 2)
+	{
+		isInit = 1;
+		samplesNum = 0;
+		VOS_LOG(VOS_LOG_DEBUG,"O chl:%d : Res:%f  \n", iChl+1, value);
+	}
+	
+	if(Display.spec.toc.ucIdx == 3)
+	{
+		VOS_LOG(VOS_LOG_DEBUG,"F chl:%d : Res:%f  \n", iChl+1, value);		
+		
+		if(isInit && (samplesNum < D_SAMPLESNUM))
+		{
+			addTocValue(&tocValues, value);
+			samplesNum++;
+		}
+		
+		if(samplesNum == D_SAMPLESNUM)
+		{
+			double tempValue = tocValues.value;
+			VOS_LOG(VOS_LOG_DEBUG,"TOC Value: %f  \n", tempValue);
+			if(tempValue < 2.5f)
+			{
+				Display.iToc = -315.5*pow(tempValue, 3) + 2041*pow(tempValue, 2) - 4404*(tempValue) + 3195;
+			}
+			
+			else
+			{
+				Display.iToc = -29.14 * log(tempValue) + 42;
+			}
+			
+			if(Display.iToc < 2)
+			{
+				Display.iToc = 2;
+			}
+
+			Display.iToc *= Display.cfg.cfg1.CELLCONSTANT[2];
+
+			memset(&tocValues, 0, sizeof(TocData)); //計算完成后清零
+			isInit = 0;
+			samplesNum = 0;
+
+        }
+				      
+	}
+
+}
+
+
+
 void Disp_Calc_Conductivity(int iChl)
 {
-    float tempResistivity=0,tempTemperature=0;
+    float tempResistivity=0, tempTemperature=0;
+	uint16_t Rt;
 
     // TBD
-
     switch(iChl)
     {
     case 0:
-        ch1_meas_proc_Inner(&tempResistivity,&tempTemperature);
+        ch1_meas_proc_Inner(&tempResistivity,&tempTemperature, &Rt);
         break;
     case 1:
         ch2_meas_proc_Inner(&tempResistivity,&tempTemperature);
         break;
     case 2:
+    {
         ch3_meas_proc_Inner(&tempResistivity,&tempTemperature);
+		Disp_Calc_TocValue(tempResistivity, iChl);
         break;
     }
-    Display.iTemperature[iChl] = tempTemperature*100; // float to integer conversion
+    }
 
-    Display.iConductivity[iChl] = tempResistivity*1000*Display.cfg.cfg1.CELLCONSTANT[iChl]/1000; // float 2 integer conversions
+
+    Display.iTemperature[iChl] = tempTemperature*100; // float to integer conversion
+	Display.iTemperature[iChl] *= Display.cfg.cfg1.TEMPCONSTANT[iChl]/1000;
+
+	Display.iConductivity[iChl] = tempResistivity*1000*Display.cfg.cfg1.CELLCONSTANT[iChl]/1000; // float 2 integer conversions
 	
     switch(iChl)
     {
@@ -926,9 +1189,11 @@ void Disp_Calc_Conductivity(int iChl)
     case 1:
         break;
     }
-
-	UartCmdPrintf(VOS_LOG_DEBUG,"chl:%d : Res:%f ,    T:%f   \n", iChl, tempResistivity, tempTemperature);
-
+	
+	if(0 == iChl || 1 == iChl)
+	{
+		VOS_LOG(VOS_LOG_DEBUG,"chl:%d : Res:%f ,    T:%f ,    Rt:%d ;   \n", iChl+1, tempResistivity, tempTemperature, Rt);
+	}
 
 }
 
@@ -962,10 +1227,15 @@ void Disp_ShowTime(void)
 
 void Disp_ShowEmptyTank(int xoff, int yoff)
 {
-    char *text;
-    if (DISP_LAN_ENGLISH == Display.cfg.cfg1.language)
+	char *text;
+    if (DISP_LAN_ENGLISH == Display.cfg.cfg1.language
+		||DISP_LAN_GERMANY == Display.cfg.cfg1.language)
     {
+#ifdef TOWHANDLE
+	    text = "Locked";
+#else
         text = "Empty Tank";
+#endif
     }
     else
     {
@@ -985,6 +1255,13 @@ typedef enum
     CHECK_SHOW_PRODUCT1,
     CHECK_SHOW_TEMPERATURE,
     CHECK_SHOW_TEMPERATURE1,
+
+#ifdef TOC
+    CHECK_SHOW_TOC_PB,    // P/B<1.3
+    CHECK_SHOW_TOC_B25,   //B25>300
+    CHECK_SHOW_TOC_VALUE, // VALUE
+#endif
+
 #ifdef UF_FUNCTION        
     CHECK_SHOW_UF_CLEAN,
 #endif    
@@ -999,7 +1276,20 @@ void Disp_ShowCheckState(int xoff,int yoff)
     uint8_t showType = 0; // 0 for alarm, 1 for cm state
     uint8_t update_bg = Display.bit3ShowAlarm;
 
-
+#ifdef TOC
+    iItems = Display.bit1PackCheck 
+             + Display.bit1FilterCheck 
+             + Display.bit1UVCheck 
+             + Display.aAlarm[DISP_ALARM_PRODUCT_RS].bit1Triggered
+             + Display.aAlarm[DISP_ALARM_PRODUCT_RS1].bit1Triggered
+             + Display.aAlarm[DISP_ALARM_TEMPERATURE].bit1Triggered
+             + Display.aAlarm[DISP_ALARM_TEMPERATURE1].bit1Triggered
+             + Display.aAlarm[DISP_ALARM_TANK_EMPTY].bit1Fired
+             + Display.aAlarm[DISP_ALARM_TOC_PB].bit1Triggered
+             + Display.aAlarm[DISP_ALARM_TOC_B25].bit1Triggered
+             + Display.aAlarm[DISP_ALARM_TOC_VALUE].bit1Triggered
+             + Display.bit1PendingUFClean;
+#else
     iItems = Display.bit1PackCheck 
              + Display.bit1FilterCheck 
              + Display.bit1UVCheck 
@@ -1009,6 +1299,9 @@ void Disp_ShowCheckState(int xoff,int yoff)
              + Display.aAlarm[DISP_ALARM_TEMPERATURE1].bit1Triggered
              + Display.aAlarm[DISP_ALARM_TANK_EMPTY].bit1Fired
              + Display.bit1PendingUFClean;
+
+#endif 
+
     if (0 == iItems)
     {
         if (0XFF != Display.ucLastShow)
@@ -1018,8 +1311,13 @@ void Disp_ShowCheckState(int xoff,int yoff)
 
         if (Display.bit1ShowCmState)
         {
-            LCD_Fill(xoff,yoff,LCD_W - 1 ,yoff + curFont->sizeY,Display.usBackColor);
-
+            // LCD_Fill(xoff,yoff,LCD_W - 1 ,yoff + curFont->sizeY,Display.usBackColor);
+            //报警消失出现红条问题
+            if(DISPLAY_PAGE_USER_SET != Display.curPage.ucMain
+               && DISPLAY_PAGE_ENG_SET != Display.curPage.ucMain)
+            {
+           	    LCD_Fill(xoff,yoff,LCD_W - 1 ,yoff + curFont->sizeY,Display.usBackColor);
+            }
             Display.bit1ShowCmState = FALSE;
         }
 
@@ -1071,10 +1369,14 @@ void Disp_ShowCheckState(int xoff,int yoff)
 
     if (Display.aAlarm[DISP_ALARM_TANK_EMPTY].bit1Fired)
     {
-        aucShow[iItems++]  = CHECK_SHOW_TANK;   
-
+        aucShow[iItems++]  = CHECK_SHOW_TANK;  
+		
+#ifdef TOWHANDLE
+		Display.bit3ShowAlarm = DISP_SHOW_ALARM_NONE;
+#else
         Display.bit3ShowAlarm = DISP_SHOW_ALARM_SENSOR; // Supersede consume material check state
-    }
+#endif
+	}
 
     if (Display.aAlarm[DISP_ALARM_PRODUCT_RS].bit1Triggered)
     {
@@ -1098,7 +1400,25 @@ void Disp_ShowCheckState(int xoff,int yoff)
     {
         aucShow[iItems++]     = CHECK_SHOW_TEMPERATURE1;   
         Display.bit3ShowAlarm = DISP_SHOW_ALARM_SENSOR;
-    }   
+    } 
+	
+#ifdef TOC
+    if (Display.aAlarm[DISP_ALARM_TOC_PB].bit1Triggered)
+    {
+        aucShow[iItems++]  = CHECK_SHOW_TOC_PB;   
+        Display.bit3ShowAlarm = DISP_SHOW_ALARM_SENSOR;
+    }
+	if (Display.aAlarm[DISP_ALARM_TOC_B25].bit1Triggered)
+    {
+        aucShow[iItems++]  = CHECK_SHOW_TOC_B25;   
+        Display.bit3ShowAlarm = DISP_SHOW_ALARM_SENSOR;
+    }
+	if (Display.aAlarm[DISP_ALARM_TOC_VALUE].bit1Triggered)
+    {
+        aucShow[iItems++]  =  CHECK_SHOW_TOC_VALUE;   
+        Display.bit3ShowAlarm = DISP_SHOW_ALARM_SENSOR;
+    }
+#endif
 
 #ifdef UF_FUNCTION        
     if (Display.bit1PendingUFClean)
@@ -1157,7 +1477,11 @@ void Disp_ShowCheckState(int xoff,int yoff)
         if (DISP_LAN_ENGLISH == Display.cfg.cfg1.language
             || DISP_LAN_GERMANY == Display.cfg.cfg1.language)
         {
+#ifdef TOWHANDLE
+			strcpy((char *)Config_buff,"Locked");
+#else
             strcpy((char *)Config_buff,"EMPTY TANK");
+#endif
         }
         else
         {
@@ -1182,13 +1506,13 @@ void Disp_ShowCheckState(int xoff,int yoff)
         switch(Display.cfg.cfg1.language)
         {
         case DISP_LAN_ENGLISH:
-            strcpy((char *)Config_buff,"FEED PRODUCT < S.P.");
+            strcpy((char *)Config_buff,"FEED PRODUCT > S.P.");
             break;
         case DISP_LAN_GERMANY:
-            strcpy((char *)Config_buff,"Eingang AUSGABE < S.P.");
+            strcpy((char *)Config_buff,"Eingang AUSGABE > S.P.");
             break;
         default:
-            strcpy((char *)Config_buff,"进水 产水<设定值");
+            strcpy((char *)Config_buff,"进水 > 设定值");
             break;
         }        
         break;
@@ -1217,6 +1541,48 @@ void Disp_ShowCheckState(int xoff,int yoff)
             break;
         }        
         break;
+		
+/*------------TOC报警显示------------*/
+/*----------日期：20181126-----------*/
+#ifdef TOC
+    case CHECK_SHOW_TOC_PB:
+		switch(Display.cfg.cfg1.language)
+        {
+        case DISP_LAN_ENGLISH:
+		case DISP_LAN_GERMANY:
+            strcpy((char *)Config_buff,"CHECK UV LAMP");
+            break;
+        default:
+            strcpy((char *)Config_buff,"请检查紫外灯");
+            break;
+        }        
+        break;
+	case CHECK_SHOW_TOC_B25:
+		switch(Display.cfg.cfg1.language)
+        {
+        case DISP_LAN_ENGLISH:
+		case DISP_LAN_GERMANY:
+            strcpy((char *)Config_buff,"CHECK U PACK");
+            break;
+        default:
+            strcpy((char *)Config_buff,"请检查纯化柱");
+            break;
+        }        
+        break;
+	case CHECK_SHOW_TOC_VALUE:
+		switch(Display.cfg.cfg1.language)
+        {
+        case DISP_LAN_ENGLISH:
+		case DISP_LAN_GERMANY:
+            strcpy((char *)Config_buff,"CHECK TOC SENSOR");
+            break;
+        default:
+            strcpy((char *)Config_buff,"请检查TOC电极");
+            break;
+        }        
+        break;
+#endif 
+
 #ifdef UF_FUNCTION        
     case CHECK_SHOW_UF_CLEAN:
         switch(Display.cfg.cfg1.language)
@@ -1317,239 +1683,441 @@ void Disp_DisplayIdlePage(void)
    
 }
 
-
 int Disp_Sensors_Item(int chl,int big,int mask,int xoff,int yoff)
 {
-    char buf[16];
-    u16 usBackColor = Display.usBackColor;
-    int iOrgYoff = yoff;
+	char buf[16];
+	u16 usBackColor = Display.usBackColor;
+	int iOrgYoff = yoff;
 
-    //Disp_Int2float1(Display.iConductivity,buf);
-    if (mask & 0x1)
-    {
-        if (DISPLAY_SENSOR_2 == chl)
-        {
-            int iXSize ;
-            switch(Display.cfg.cfg1.language)
-            {
-            case DISP_LAN_ENGLISH:
-                strcpy(buf,"Feed    ");
-                break;
-            case DISP_LAN_GERMANY:
-                strcpy(buf,"Eingang ");
-                break;
-            default : // DISP_LAN_GERMANY
-                strcpy(buf,"进水    ");
-                break;
-            }
-
-            iXSize = (strlen((char *)buf) + (11))*curFont->sizeX;
-
-            if (xoff + iXSize >= LCD_W)
-            {
-                xoff -= ((xoff + iXSize - LCD_W) + 5);
-            }
-            curFont->DrawText(xoff,yoff,(u8 *)buf,BLACK,usBackColor);
-
-            iXSize = strlen((char *)buf)*curFont->sizeX;            
-            xoff += iXSize;
-        }
-        
-        if (0 == Display.cfg.cfg2.UNIT)
-        {
-            if (Display.iConductivity[chl] >= LOW_RES)
-            {
-                Disp_Int2floatFormat((Display.iConductivity[chl] + 50)/100,2,1,buf);
-            }
-            else
-            {
-                strcpy(buf," < 1");
-            }
-        
-            sprintf((char *)Config_buff,"%s",buf);
-        }
-        else
-        {
-            uint32_t fus = (1000*1000)/Display.iConductivity[chl];
-    
-            Disp_Int2floatFormat(fus,1,3,buf);
-            
-            sprintf((char *)Config_buff,"%s",buf);
-            
-        }
-                
-    #ifdef CODEGB_48  
-        if (big) Disp_SelectFont(&font48);  
-    #endif
-        curFont->DrawText(xoff,yoff,Config_buff,BLACK,usBackColor);
-    
-        xoff += strlen((char *)Config_buff)*curFont->sizeX;
-        yoff += curFont->sizeY;
-    
-    #ifdef CODEGB_48    
-        if (big) Disp_SelectFont(oldfont);  
-    #endif
-    
-        yoff -= curFont->sizeY;
-        if (0 == Display.cfg.cfg2.UNIT)
-        {
-            sprintf((char *)Config_buff," %s",UNIT_TYPE_0);
-        }
-        else
-        {
-            sprintf((char *)Config_buff," %s",UNIT_TYPE_1);
-        }
-        curFont->DrawText(xoff,yoff,Config_buff,BLACK,usBackColor);
-        
-        yoff += 30;
-    }
-
-    if (mask & 0x2)
-    {
-        // Disp_Int2float1(Display.iTemperature,buf);
-        Disp_Int2floatFormat((Display.iTemperature[chl] + 50)/100,1,1,buf);
-    
-        sprintf((char *)Config_buff,"%s ℃",buf);
-       
-        curFont->DrawText(xoff/*+15*/ ,yoff,Config_buff,BLACK,usBackColor);
-        yoff += 30;
-    }
-
-    return yoff - iOrgYoff;
-
-    //usBackColor = Display.usBackColor;
+	LCD_Clear(Display.usBackColor); //清屏
+	
+	if (mask & 0x1)
+	{
+		if (DISPLAY_SENSOR_2 == chl)
+		{
+			int iXSize ;
+			if(0 == Display.cfg.cfg2.FEED_KEY)
+			{
+				switch(Display.cfg.cfg1.language)
+				{
+				case DISP_LAN_ENGLISH:
+					strcpy(buf,"  ");
+					break;
+				case DISP_LAN_GERMANY:
+					strcpy(buf,"  ");
+					break;
+				default : 
+					strcpy(buf,"  ");
+					break;
+				}
+			}
+			else
+			{
+				switch(Display.cfg.cfg1.language)
+				{
+				case DISP_LAN_ENGLISH:
+					strcpy(buf,"Feed    ");
+					break;
+				case DISP_LAN_GERMANY:
+					strcpy(buf,"Eingang ");
+					break;
+				default : 
+					strcpy(buf,"进水    ");
+					break;
+				}
+			}
+			iXSize = (strlen((char *)buf) + (11))*curFont-> sizeX;
+			if (xoff + iXSize >= LCD_W)
+			{
+				xoff -= ((xoff + iXSize - LCD_W) + 5);
+			}
+				//不显示TOC,进水电导上移一行
+			if((DISPLAY_SENSOR_2 == chl) && (1 != Display.cfg.cfg2.TOC_SHOW) )
+			{
+				curFont->DrawText(xoff-40,yoff-30,(u8 *)buf,BLACK,usBackColor);
+			}
+			else
+			{
+				curFont->DrawText(xoff-40,yoff,(u8 *)buf,BLACK,usBackColor);//
+			}
+			iXSize = strlen((char *)buf)*curFont->sizeX;			
+			xoff += iXSize - 5;
+		}
+				   
+        if (0 == Display.cfg.cfg2.UNIT && DISPLAY_SENSOR_1 == chl) //DISPLAY_SENSOR_1 == chl
+		{
+			if (Display.iConductivity[chl] >= LOW_RES)
+			{
+				Disp_Int2floatFormat((Display.iConductivity[chl] + 50)/100,2,1,buf);
+			}
+			else
+			{
+				strcpy(buf," < 1");
+			}		
+			sprintf((char *)Config_buff,"%s",buf);
+		}
+		else if(1 == Display.cfg.cfg2.UNIT && DISPLAY_SENSOR_1 == chl)
+		{
+			uint32_t fus = (1000*1000)/Display.iConductivity[chl];
+			Disp_Int2floatFormat(fus,1,3,buf);
+			sprintf((char *)Config_buff,"%s",buf);
+		}
+		//进水电导率值
+		else
+		{
+			uint32_t fus = (Display.iConductivity[chl]+5)/100; //20160922
+			Disp_Int2floatFormat(fus,1,1,buf);
+			sprintf((char *)Config_buff,"%s",buf); 
+		}				
+#ifdef CODEGB_48  
+		if (big) Disp_SelectFont(&font48);	
+#endif
+		if (DISPLAY_SENSOR_1 == chl)
+		{
+			curFont->DrawText(xoff,yoff,Config_buff,BLACK,usBackColor);
+		}
+		//进水电导不显示
+		else if((DISPLAY_SENSOR_2 == chl) && (0 == Display.cfg.cfg2.FEED_KEY) ) 
+		{
+			//FEED_KEY == 0 不显示进水电导率值
+		}
+		//TOC不显示
+		else if((DISPLAY_SENSOR_2 == chl) && (1 != Display.cfg.cfg2.TOC_SHOW) )
+		{
+			curFont->DrawText(xoff-35,yoff - 30,Config_buff,BLACK,usBackColor);
+		}
+		//显示TOC,进水电导
+		else 
+		{
+			curFont->DrawText(xoff-35,yoff,Config_buff,BLACK,usBackColor);
+		}
+		xoff += strlen((char *)Config_buff)*curFont->sizeX;
+		yoff += curFont->sizeY;
+		
+#ifdef CODEGB_48    
+		if (big) Disp_SelectFont(oldfont);	
+#endif    
+		yoff -= curFont->sizeY;
+		if (0 == Display.cfg.cfg2.UNIT && DISPLAY_SENSOR_1 == chl) //DISPLAY_SENSOR_1 == chl
+		{
+			sprintf((char *)Config_buff," %s",UNIT_TYPE_0);
+		}
+		else
+		{
+			sprintf((char *)Config_buff,"%s",UNIT_TYPE_1);
+		}
+		
+		if (DISPLAY_SENSOR_1 == chl)
+		{
+			curFont->DrawText(xoff,yoff,Config_buff,BLACK,usBackColor);
+		}
+		else if((DISPLAY_SENSOR_2 == chl) && (0 == Display.cfg.cfg2.FEED_KEY))
+		{
+			//FEED_KEY == 0 不显示进水电导率单位
+		}
+		//不显示TOC，进水电导上移一行
+		else if((DISPLAY_SENSOR_2 == chl) && (1 != Display.cfg.cfg2.TOC_SHOW) )
+		{
+			curFont->DrawText(xoff-35,yoff-30,Config_buff,BLACK,usBackColor);
+		}
+		else
+		{
+			curFont->DrawText(xoff-35,yoff,Config_buff,BLACK,usBackColor);
+		}
+		yoff += 30;
+	}
+	  
+	if (mask & 0x2)
+	{
+		Disp_Int2floatFormat((Display.iTemperature[chl] + 50)/100,1,1,buf);
+		switch(Display.cfg.cfg1.language)
+		{
+		case DISP_LAN_ENGLISH:
+			sprintf((char *)Config_buff,"Temp.  %s℃",buf);
+			break;
+		case DISP_LAN_GERMANY:
+			sprintf((char *)Config_buff,"Temp.  %s℃",buf);
+			break;
+		default : 
+			sprintf((char *)Config_buff,"水温   %s℃",buf);
+			break;
+		}
+#ifdef CODEGB_48 
+		if(DISPLAY_STATE_TOC != Display.CurState.ucMain && big == TRUE)
+			curFont->DrawText(xoff-140,yoff,Config_buff,BLACK,usBackColor);
+		else
+			curFont->DrawText(xoff-90,yoff,Config_buff,BLACK,usBackColor);
+#else
+		curFont->DrawText(xoff-90,yoff,Config_buff,BLACK,usBackColor);
+#endif  
+		yoff += 30;
+	}
+	
+	if ((mask & 0x8) && (1 == Display.cfg.cfg2.TOC_SHOW)) //toc
+	{	
+	/*
+		if(Display.iConductivity[chl] == 0)
+		{
+			sprintf((char *)Config_buff,"TOC 	0 ppb");
+			curFont->DrawText(xoff-40,yoff-30,Config_buff,BLACK,usBackColor);
+			yoff += 30;
+		}
+	*/	
+		if(Display.iToc > 200000)
+		{
+			sprintf((char *)Config_buff,"TOC   >200 ppb");
+			curFont->DrawText(xoff-40,yoff-30,Config_buff,BLACK,usBackColor);
+			yoff += 30;
+		}
+		else if(TOC_Exception == 1)
+		{
+			sprintf((char *)Config_buff,"TOC    -- ppb"); //0
+			curFont->DrawText(xoff-40,yoff-30,Config_buff,BLACK,usBackColor);
+			yoff += 30;
+		}
+		else
+		{
+			Disp_Int2floatFormat_toc((Display.iToc+500)/1000,3,0,buf);//20161031  1000
+			sprintf((char *)Config_buff,"TOC    %s ppb",buf);
+			curFont->DrawText(xoff-40,yoff-30,Config_buff,BLACK,usBackColor);
+			yoff += 30;
+		}
+	}
+	return yoff - iOrgYoff;
 
 }
+
+int Disp_Check_IsAlarm()
+{
+#ifdef TOC
+	if(Display.bit1PackCheck != TRUE
+	   &&Display.bit1UVCheck   != TRUE
+       &&Display.bit1FilterCheck != TRUE
+	   &&Display.aAlarm[DISP_ALARM_PRODUCT_RS].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_PRODUCT_RS1].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TEMPERATURE].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TEMPERATURE1].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TANK_EMPTY].bit1Fired != TRUE
+       &&Display.aAlarm[DISP_ALARM_TOC_PB].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TOC_B25].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TOC_VALUE].bit1Triggered != TRUE
+       &&DISPLAY_PAGE_QUANTITY_TAKING_WATER != Display.curPage.ucMain
+       &&DISPLAY_SUB_PAGE_QUANTITY_TAKING_WATER_SETTING != Display.curPage.ucSub)
+	{
+		return 0;
+	}
+	else 
+	{
+		return 1;
+	}
+#else
+	if(Display.bit1PackCheck != TRUE
+	   &&Display.bit1UVCheck   != TRUE
+       &&Display.bit1FilterCheck != TRUE
+	   &&Display.aAlarm[DISP_ALARM_PRODUCT_RS].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_PRODUCT_RS1].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TEMPERATURE].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TEMPERATURE1].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TANK_EMPTY].bit1Fired != TRUE
+       &&DISPLAY_PAGE_QUANTITY_TAKING_WATER != Display.curPage.ucMain
+       &&DISPLAY_SUB_PAGE_QUANTITY_TAKING_WATER_SETTING != Display.curPage.ucSub)
+	{
+		return 0;
+	}
+	else 
+	{
+		return 1;
+	}
+
+#endif
+}
+
 
 
 void Disp_Sensors(int xoff,int yoff,int mask4s)
 {
-    u8 ucC3State = FALSE;
-
-    if (DEV_TYPE_V1 != Display.cfg.cfg3.devtype)
-    {
-        return;
-    }
-
-    if (DISPLAY_PAGE_USER_SET == Display.curPage.ucMain
-        || DISPLAY_PAGE_ENG_SET == Display.curPage.ucMain)
-    {
-        return;
-    }
-
-    //usBackColor = Display.usBackColor;
-
-    if ((DISPLAY_STATE_CIRCULATION == Display.CurState.ucMain)
-        ||(DISPLAY_STATE_NORMAL_TAKING_WATER == Display.CurState.ucMain)
-        ||(DISPLAY_STATE_QUANTITY_TAKING_WATER == Display.CurState.ucMain))
-    {
-        ucC3State =  TRUE;
-    }
-
-    if (ucC3State 
-        && Display.aAlarm[DISP_ALARM_PRODUCT_RS].bit1Fired)
-    {
-    
-        if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_PRODUCT_RS].ulFireSec) >= DISP_ALARM_DURATION_TIME)
-        {
-            //usBackColor = RED;
-            Display.aAlarm[DISP_ALARM_PRODUCT_RS].bit1Triggered = TRUE;
-        }
-    }
-
-    if (ucC3State 
-        && Display.aAlarm[DISP_ALARM_PRODUCT_RS1].bit1Fired)
-    {
-    
-        if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_PRODUCT_RS1].ulFireSec) >= DISP_ALARM_DURATION_TIME)
-        {
-            //usBackColor = RED;
-            Display.aAlarm[DISP_ALARM_PRODUCT_RS1].bit1Triggered = TRUE;
-        }
-    }
-    
-    if (ucC3State 
-        && Display.aAlarm[DISP_ALARM_TEMPERATURE].bit1Fired)
-    {
-        if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_TEMPERATURE].ulFireSec) >= DISP_ALARM_DURATION_TIME)
-        {
-            //usBackColor = RED;
-            Display.aAlarm[DISP_ALARM_TEMPERATURE].bit1Triggered = TRUE;
-        }
-    }
-
-    if (ucC3State 
-        && Display.aAlarm[DISP_ALARM_TEMPERATURE1].bit1Fired)
-    {
-        if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_TEMPERATURE1].ulFireSec) >= DISP_ALARM_DURATION_TIME)
-        {
-            //usBackColor = RED;
-            Display.aAlarm[DISP_ALARM_TEMPERATURE1].bit1Triggered = TRUE;
-        }
-    }
-
-    if(DISPLAY_STATE_TOC != Display.CurState.ucMain)
-    {
-        //int ret;
-
-        int offset;
-
-        if (mask4s & (1 << DISPLAY_SENSOR_1))
-        {
-            offset = Disp_Sensors_Item(DISPLAY_SENSOR_1,TRUE, 3,xoff,yoff);
-
-            yoff += offset;
-        }
-
-#ifdef UF_FUNCTION
-        if (mask4s & (1 << DISPLAY_SENSOR_2))
-        {
-            offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 1,xoff,yoff);
-
-            yoff += offset;
-            
-        }
+	u8 ucC3State = FALSE;
+	int isAlarm; //判断是否有报警、耗材到期或定量取水
+		
+	if (DEV_TYPE_V1 != Display.cfg.cfg3.devtype)
+	{
+		return;
+	}
+	
+	if (DISPLAY_PAGE_USER_SET == Display.curPage.ucMain
+		|| DISPLAY_PAGE_ENG_SET == Display.curPage.ucMain)
+	{
+		return;
+	}
+	
+	if ((DISPLAY_STATE_CIRCULATION == Display.CurState.ucMain)
+		||(DISPLAY_STATE_NORMAL_TAKING_WATER == Display.CurState.ucMain)
+		||(DISPLAY_STATE_QUANTITY_TAKING_WATER == Display.CurState.ucMain))
+	{
+		ucC3State =  TRUE;
+	}
+	
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_PRODUCT_RS].bit1Fired)
+	{	
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_PRODUCT_RS].ulFireSec) >= DISP_ALARM_DURATION_TIME)
+		{
+			Display.aAlarm[DISP_ALARM_PRODUCT_RS].bit1Triggered = TRUE;
+		}
+	}
+	
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_PRODUCT_RS1].bit1Fired)
+	{	 
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_PRODUCT_RS1].ulFireSec) >= DISP_ALARM_DURATION_TIME)
+		{
+			Display.aAlarm[DISP_ALARM_PRODUCT_RS1].bit1Triggered = TRUE;
+		}
+	}
+		
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_TEMPERATURE].bit1Fired)
+	{
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_TEMPERATURE].ulFireSec) >= DISP_ALARM_DURATION_TIME)
+		{
+			Display.aAlarm[DISP_ALARM_TEMPERATURE].bit1Triggered = TRUE;
+		}
+	}
+	
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_TEMPERATURE1].bit1Fired)
+	{
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_TEMPERATURE1].ulFireSec) >= DISP_ALARM_DURATION_TIME)
+		{
+			Display.aAlarm[DISP_ALARM_TEMPERATURE1].bit1Triggered = TRUE;
+		}
+	}
+		
+#ifdef TOC
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_TOC_PB].bit1Fired)
+	{
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_TOC_PB].ulFireSec) >= DISP_TOC_ALARM_DURATION_TIME)
+		{
+			Display.aAlarm[DISP_ALARM_TOC_PB].bit1Triggered = TRUE; 
+		}
+	}
+		
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_TOC_B25].bit1Fired)
+	{
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_TOC_B25].ulFireSec) >= DISP_TOC_ALARM_DURATION_TIME)
+		{
+				//usBackColor = RED;
+			Display.aAlarm[DISP_ALARM_TOC_B25].bit1Triggered = TRUE;
+		}
+	}
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_TOC_VALUE].bit1Fired)
+	{
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_TOC_VALUE].ulFireSec) >= DISP_TOC_ALARM_DURATION_TIME)
+		{
+			Display.aAlarm[DISP_ALARM_TOC_VALUE].bit1Triggered = TRUE;
+		}
+	}
 #endif
-#ifdef TOC
-        if (mask4s & (1 << DISPLAY_SENSOR_TOC))
-        {
-            offset = Disp_Sensors_Item(DISPLAY_SENSOR_TOC,FALSE, 3,xoff,yoff);
-
-            yoff += offset;
-        }
-#endif        
-
-    }
-    else
-    {
-        int offset;
-
-        if (mask4s & (1 << DISPLAY_SENSOR_1))
-        {
-            offset = Disp_Sensors_Item(DISPLAY_SENSOR_1,FALSE, 3,xoff,yoff);
-
-            yoff += offset;
-        }
-
+	isAlarm = Disp_Check_IsAlarm();
+	
+	if(DISPLAY_STATE_TOC != Display.CurState.ucMain 
+		&& (isAlarm == 0 || 0 == Display.cfg.cfg2.TOC_SHOW))
+	{
+		int offset;
+		if (mask4s & (1 << DISPLAY_SENSOR_1))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_1,TRUE, 3,xoff,yoff);
+			yoff += (offset + 30);		 
+		}
+	
 #ifdef UF_FUNCTION
-        if (mask4s & (1 << DISPLAY_SENSOR_2))
-        {
-            offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 3,xoff,yoff);
+		if (mask4s & (1 << DISPLAY_SENSOR_2))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 1,xoff,yoff);
+			yoff += offset; 		 
+		}
+#endif
+    
+#ifdef TOC
+		if (mask4s & (1 << DISPLAY_SENSOR_2))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 1,xoff,yoff);
+			yoff += offset; 	 
+		}
+		if (mask4s & (1 << DISPLAY_SENSOR_TOC))
+		{		
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_TOC,FALSE, 8,xoff,yoff); 
+			yoff += offset;
+		}
+#endif       
+	}
+	
+	else if(DISPLAY_STATE_TOC != Display.CurState.ucMain && isAlarm == 1)
+	{
+		int offset;
+		if (mask4s & (1 << DISPLAY_SENSOR_1))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_1,FALSE, 3,xoff,yoff);
+			yoff += (offset + 30);	 
+		}
+	
+#ifdef UF_FUNCTION
+		if (mask4s & (1 << DISPLAY_SENSOR_2))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 1,xoff,yoff);
+			yoff += offset; 		  
+		}
+#endif
 
-            yoff += offset;
-            
-        }
+#ifdef TOC
+		if (mask4s & (1 << DISPLAY_SENSOR_2))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 1,xoff,yoff);
+			yoff += offset; 		  
+		}
+
+		if (mask4s & (1 << DISPLAY_SENSOR_TOC))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_TOC,FALSE, 8,xoff,yoff); 
+			yoff += offset;
+		}
+#endif       
+	}
+	
+	else
+	{
+		int offset;
+		if (mask4s & (1 << DISPLAY_SENSOR_1))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_1,FALSE, 3,xoff,yoff);
+			yoff += (offset + 30);
+		}
+	
+#ifdef UF_FUNCTION
+		if (mask4s & (1 << DISPLAY_SENSOR_2))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 3,xoff,yoff);
+			yoff += offset; 		  
+		}
 #endif        
 
 #ifdef TOC
-        if (mask4s & (1 << DISPLAY_SENSOR_TOC))
-        {
-            offset = Disp_Sensors_Item(DISPLAY_SENSOR_TOC,FALSE, 3,xoff,yoff);
+		if (mask4s & (1 << DISPLAY_SENSOR_2))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 1,xoff,yoff);
+			yoff += offset; 		  
+		}
 
-            yoff += offset;
-        }   
-#endif        
-    }
+		if (mask4s & (1 << DISPLAY_SENSOR_TOC))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_TOC,FALSE, 8,xoff,yoff);
+			yoff += offset;
+		}	
+#endif    
+	}
 
 }
 
@@ -1559,7 +2127,7 @@ void Disp_UpdateIdlePage(int sensor)
 
     if (sensor)
     {
-        Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,3);
+        Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,5);
     }
 }
 
@@ -1581,8 +2149,13 @@ void Disp_PrepareMove2Idle(void)
     Display.TgtState.ucMain = DISPLAY_STATE_IDLE;
     Display.TgtState.ucSub  = DISPLAY_SUB_STATE_IDLE;
     Display.ulIdleFlushTime  = 0;    
-    Display.ulIdleCirTime = 0;    
+    Display.ulIdleCirTime = 0; 
+
+	key_toc = 0;
+	
     Disp_Move2Idle();
+
+	Disp_Set_Cirtime(); //设置循环时间20170911
 }
 
 void Disp_DisplayIdleFlushPage(void)
@@ -1685,7 +2258,7 @@ void Disp_PrepareMove2IdleFlush(void)
     Display.ulIdleFlushCnt  = 0;  
 
     Display.ulIdleFlushTime = 0;
-    
+    key_em = 1;
     Disp_Move2IdleFlush();
 }
 
@@ -1714,7 +2287,7 @@ void Disp_CirculationInitPage(void)
     
     Disp_WorkState(20,20,text);
 
-    Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,1);
+    Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,5);
 
 }
 
@@ -1749,8 +2322,8 @@ void Disp_NtwCumulateVolume(void)
     if (DISPLAY_STATE_NORMAL_TAKING_WATER != Display.CurState.ucMain)
     {
         return;
-    }
-    
+    } 
+	else
     {
         uint32_t time = RTC_Get_Second();
     
@@ -1783,8 +2356,30 @@ void Disp_StopNtwTakingWater()
     Disp_NtwCumulateVolume();   
 }
 
+//第一次循环后跳转到TOC过程
+void Disp_head_cir_msg_cb(void)
+{
+     Disp_PrepareMove2TOC();
+}
 
+void Disp_head_cir_cb(void *para)
+{
+     Disp_report(Disp_head_cir_msg_cb);
+}
 
+//第一次循环0626
+void Disp_Move2HeadCirculation(void)
+{
+   Disp_Move2DstPage();
+
+   Disp_Move2DstState();
+
+   Disp_CirculationInitPage();
+
+   // add supervisor time
+   system_timeout(Display.ulCalcirtime,SYS_TIMER_ONE_SHOT,Display.ulCalcirtime,Disp_head_cir_cb,&Display,&Display.to4cir);
+ 
+}
 
 void Disp_cir_msg_cb(void)
 {
@@ -1810,6 +2405,18 @@ void Disp_Move2Circulation(void)
    system_timeout(Display.ulCalcirtime,SYS_TIMER_ONE_SHOT,Display.ulCalcirtime,Disp_cir_cb,&Display,&Display.to4cir);
 }
 
+//第一次循环0626
+void Disp_PrepareMove2HeadCirculation(void)
+{
+    Display.tgtPage.ucMain  = DISPLAY_PAGE_CIRCULATION;
+    Display.tgtPage.ucSub   = DISPLAY_SUB_PAGE_IDLE;
+    Display.TgtState.ucMain = DISPLAY_STATE_CIRCULATION;
+    Display.TgtState.ucSub  = DISPLAY_SUB_STATE_IDLE;
+
+    Display.ulIdleCirTime = 0;   
+    
+    Disp_Move2HeadCirculation();
+}
 
 void Disp_PrepareMove2Circulation(void)
 {
@@ -1828,7 +2435,17 @@ void Disp_Prepare4Circulation(void)
 {
 
 #ifdef TOC
-    Disp_PrepareMove2TOC();
+    // Disp_PrepareMove2TOC();
+	if(1 == Display.cfg.cfg2.TOC_FUN)
+	{
+		//先循环后自动跳转到TOC过程0626
+		Disp_PrepareMove2HeadCirculation();
+	}
+    else
+    {
+    	//检测不到TOC则不再进入toc过程
+    	Disp_PrepareMove2Circulation();
+    }   
 #else
     Disp_PrepareMove2Circulation();
 #endif
@@ -1873,7 +2490,37 @@ void Disp_QtwProductVolumn(void)
 void Disp_CheckTankState(void)
 {
     Disp_GetTankState();
+	
+#ifdef TOWHANDLE
+	if (Display.aAlarm[DISP_ALARM_TANK_EMPTY].bit1Fired)
+    {
+    	uint8_t uc2Idle = FALSE;
+        switch(Display.CurState.ucMain)
+        {
+        default: 
+            break;
+        case DISPLAY_STATE_NORMAL_TAKING_WATER:
+            Disp_StopNtwTakingWater();
+			uc2Idle = TRUE;
+            break;
+        case DISPLAY_STATE_QUANTITY_TAKING_WATER:
+            Disp_StopQtwTakingWater();
+			uc2Idle = TRUE;
+            break;
+		case DISPLAY_STATE_CIRCULATION:
+			system_untimeout(&Display.to4cir);
+			uc2Idle = TRUE;
+			break;
+        }
 
+		if (uc2Idle)
+        {
+			Disp_PrepareMove2Idle();
+        }
+
+    }
+
+#else
     if (Display.aAlarm[DISP_ALARM_TANK_EMPTY].bit1Fired)
     {
         uint8_t uc2cir = FALSE;
@@ -1896,6 +2543,8 @@ void Disp_CheckTankState(void)
             Disp_Prepare4Circulation();
         }
     }
+#endif
+
 }
 
 
@@ -2185,7 +2834,7 @@ void Disp_uf_pre_clean_msg_cb(void)
         system_untimeout(&Display.to4UfPrePare);
         return;
     }
-
+	else
     {
         system_untimeout(&Display.to4UfPrePare);
         
@@ -2344,13 +2993,16 @@ void Disp_TOCFlushPage(void)
     switch(Display.cfg.cfg1.language)
     {
     case DISP_LAN_ENGLISH:
-        text = "TOC Flush";
+        //text = "TOC Flush";
+        text = "Recirculation";
         break;
     case DISP_LAN_GERMANY:
-        text = "TOC Spuelung";
+        //text = "TOC Spuelung";
+		text = "Rezirkulation";
         break;
     default:
-        text = "TOC 冲洗";
+       // text = "TOC 冲洗";
+		text = "循 环";
         break;
     }
     
@@ -2373,13 +3025,16 @@ void Disp_TOCOxidatePage(void)
     switch(Display.cfg.cfg1.language)
     {
     case DISP_LAN_ENGLISH:
-        text = "TOC Oxidate";
+        //text = "TOC Oxidate";
+        text = "Recirculation";
         break;
     case DISP_LAN_GERMANY:
-        text = "TOC Oxidate";
+        //text = "TOC Oxidate";
+		text = "Rezirkulation";
         break;
     default:
-        text = "TOC 氧化";
+        //text = "TOC 氧化";
+        text = "循 环";
         break;
     }
     
@@ -2413,7 +3068,7 @@ void Disp_toc_fast_meas_msg_cb(void)
         
         return;
     }
-
+	else
     {
         uint8_t ucPoolIdx = Disp_AllocAdcAction();    
         
@@ -2437,58 +3092,54 @@ void Disp_toc_fast_meas_cb(void *para)
 
 void Disp_Move2TOCFlush(void)
 {
-
-   if (Display.spec.toc.ucIdx < Display.spec.toc.ucActionCnt)
-   {
-       uint8_t ucIdx = Display.spec.toc.ucIdx;
-
-       Display.spec.toc.ucIdx++;
-       switch(Display.spec.toc.aActionBuf[ucIdx])
-       {
-       case DISPALY_SUB_PAGE_TOC_FLUSH:
-           Display.tgtPage.ucMain  = DISPLAY_PAGE_TOC;
-           Display.tgtPage.ucSub   = DISPALY_SUB_PAGE_TOC_FLUSH;
-           Display.TgtState.ucMain = DISPLAY_STATE_TOC;
-           Display.TgtState.ucSub  = DISPLAY_SUB_STATE_TOC_FLUSH;
-            Disp_Move2DstPage();
-            
-            Disp_Move2DstState();
-            
-            Disp_TOCFlushPage();
-
-            // add supervisor time
-            system_timeout(Display.cfg.cfg3.usTocWashTime*1000,SYS_TIMER_ONE_SHOT,0,Disp_toc_cb,&Display,&Display.to4TOC);
-            
-            break;
-       default: // DISPALY_SUB_PAGE_TOC_OXIDATION
-           Display.tgtPage.ucMain  = DISPLAY_PAGE_TOC;
-           Display.tgtPage.ucSub   = DISPALY_SUB_PAGE_TOC_OXIDATION;
-           Display.TgtState.ucMain = DISPLAY_STATE_TOC;
-           Display.TgtState.ucSub  = DISPLAY_SUB_STATE_TOC_OXIDATION;
-
-            Disp_Move2DstPage();
-            
-            Disp_Move2DstState();
-            
-            Disp_TOCOxidatePage();
-
-            system_timeout(Display.cfg.cfg3.usTocOxiTime*1000,SYS_TIMER_ONE_SHOT,0,Disp_toc_cb,&Display,&Display.to4TOC);
-           
-            break;
-       }
-   }
-   else
-   {
-       system_untimeout(&Display.to4TOC);
-
-       system_untimeout(&Display.to4TOCMeas);
-
-       Disp_Select_Sensor(0);
-   
-       //Disp_PrepareMove2Idle();
-       Disp_PrepareMove2Circulation();       
-   }
-   
+	if(key_toc)
+	{
+		if (Display.spec.toc.ucIdx < Display.spec.toc.ucActionCnt )
+		{
+			uint8_t ucIdx = Display.spec.toc.ucIdx;
+			Display.spec.toc.ucIdx++;
+			switch(Display.spec.toc.aActionBuf[ucIdx])
+			{
+			case DISPALY_SUB_PAGE_TOC_FLUSH:
+				Display.tgtPage.ucMain  = DISPLAY_PAGE_TOC;
+				Display.tgtPage.ucSub   = DISPALY_SUB_PAGE_TOC_FLUSH;
+				Display.TgtState.ucMain = DISPLAY_STATE_TOC;
+				Display.TgtState.ucSub  = DISPLAY_SUB_STATE_TOC_FLUSH;
+				Disp_Move2DstPage();
+				Disp_Move2DstState();
+				Disp_TOCFlushPage();
+				// add supervisor time
+				if(Display.spec.toc.ucIdx == 3)
+				{
+				//第二次TOC冲洗20s
+					system_timeout(20*1000,SYS_TIMER_ONE_SHOT,0,Disp_toc_cb,&Display,&Display.to4TOC);
+				}
+				else
+				{
+					system_timeout(Display.cfg.cfg3.usTocWashTime*1000,SYS_TIMER_ONE_SHOT,0,Disp_toc_cb,&Display,&Display.to4TOC);
+				}
+				break;
+			default: // DISPALY_SUB_PAGE_TOC_OXIDATION
+				Display.tgtPage.ucMain  = DISPLAY_PAGE_TOC;
+				Display.tgtPage.ucSub   = DISPALY_SUB_PAGE_TOC_OXIDATION;
+				Display.TgtState.ucMain = DISPLAY_STATE_TOC;
+				Display.TgtState.ucSub  = DISPLAY_SUB_STATE_TOC_OXIDATION;
+				Disp_Move2DstPage();   
+				Disp_Move2DstState(); 
+				Disp_TOCOxidatePage();
+				system_timeout(Display.cfg.cfg3.usTocOxiTime*1000,SYS_TIMER_ONE_SHOT,0,Disp_toc_cb,&Display,&Display.to4TOC);
+				break;
+			}
+		}
+		else
+		{
+			system_untimeout(&Display.to4TOC);
+			system_untimeout(&Display.to4TOCMeas);
+			Disp_Select_Sensor(0);
+			//Disp_PrepareMove2Idle();
+			Disp_PrepareMove2Circulation();       
+		}
+	}
 }
 
 
@@ -2496,6 +3147,7 @@ void Disp_PrepareMove2TOC(void)
 {
     Display.spec.toc.ulMaxRes4Wash = 0;
     Display.spec.toc.ulMinRes4Oxi  = 0xffffffff;
+	key_toc = 1;
 
     Display.spec.toc.ucIdx       = 0;
     Display.spec.toc.ucActionCnt = 0;
@@ -2511,8 +3163,7 @@ void Disp_PrepareMove2TOC(void)
     Disp_Move2TOCFlush();
 
     // start fast measurement timer
-    system_timeout(100,SYS_TIMER_PERIOD,TOC_MEAS_PERIOD,Disp_toc_fast_meas_cb,&Display,&Display.to4TOCMeas);
-    
+    system_timeout(TOC_DELAY_SAMPLE,SYS_TIMER_PERIOD,TOC_MEAS_PERIOD,Disp_toc_fast_meas_cb,&Display,&Display.to4TOCMeas);    
 }
 
 void Disp_QtwSettingInitPage(void)
@@ -2534,9 +3185,9 @@ void Disp_QtwSettingUpdatePage(void)
 
 void Disp_Move2QtwSetting(void)
 {
-   Disp_Move2DstPage();
-
-   Disp_QtwSettingInitPage();
+	Disp_Move2DstPage();
+    Disp_QtwSettingInitPage();
+	Disp_Set_Cirtime(); //设置循环时间20170911
 }
 
 void Disp_PrepareMove2QtwSetting()
@@ -2544,14 +3195,21 @@ void Disp_PrepareMove2QtwSetting()
     Display.tgtPage.ucMain = DISPLAY_PAGE_QUANTITY_TAKING_WATER;
     Display.tgtPage.ucSub  = DISPLAY_SUB_PAGE_QUANTITY_TAKING_WATER_SETTING;
 
+    key_toc = 0;
+	
     Disp_Move2QtwSetting();
 }
 
 void Disp_TankEmptyInitPage(void)
 {
     uint16_t usTmp = Display.usBackColor;
-
+	
+#ifdef TOWHANDLE
+	Display.usBackColor = WHITE;
+#else
     Display.usBackColor = RED;
+#endif
+
     LCD_Clear(Display.usBackColor);
     Disp_ShowEmptyTank(0xff,0xff);
     Display.usBackColor = usTmp;
@@ -2595,7 +3253,7 @@ void Disp_QtwTakingWaterInitPage(void)
 
     Disp_QtwProductVolumn();
 
-    Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,3);
+    Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,5);
 }
 
 typedef void (*disp_msg_cb)(void);
@@ -2681,7 +3339,7 @@ void Disp_NtwInitPage(void)
     }
     Disp_WorkState(20,20,text);
     
-    Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,3);
+    Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,5);
 }
 
 void Disp_ntw_msg_cb(void)
@@ -2722,7 +3380,9 @@ void Disp_Prepare4Ntw(void)
         Display.tgtPage.ucSub  = DISPLAY_SUB_PAGE_TANK_EMPTY;
         Display.TgtState.ucMain = DISPLAY_STATE_IDLE;
         Display.TgtState.ucSub  = DISPLAY_SUB_STATE_IDLE;
-    
+
+        key_toc = 0;
+        key_em = 1;
         Disp_Move2TankEmpty();
     }
     else
@@ -2731,10 +3391,12 @@ void Disp_Prepare4Ntw(void)
         Display.tgtPage.ucSub  = DISPLAY_SUB_PAGE_IDLE;
         Display.TgtState.ucMain = DISPLAY_STATE_NORMAL_TAKING_WATER;
         Display.TgtState.ucSub  = DISPLAY_SUB_STATE_IDLE;
+
+        key_toc = 0;
         
         Disp_Move2Ntw();
     }   
-
+    Disp_Set_Cirtime(); //设置循环时间20170911
 }
 
 void Disp_DecInitPage(void)
@@ -3031,6 +3693,56 @@ void Disp_userSetDrawUnit(int xoff,int yoff,u16 charColor,u16 bkColor)
 
 }
 
+void Disp_userSetDrawFeed_Key(int xoff,int yoff,u16 charColor,u16 bkColor)
+{
+    if (DISP_LAN_ENGLISH == Display.cfg.cfg1.language
+        || DISP_LAN_GERMANY == Display.cfg.cfg1.language)
+    {	
+		switch (Display.cfg.cfg2.SENSOR_CFG_KEY)
+		{
+		case 0:
+			sprintf((char *)Config_buff,"SENSOR CFG:%s    ", SENSOR_ENG_OFF);
+			break;
+		case 1:
+			sprintf((char *)Config_buff,"SENSOR CFG:%s    ", SENSOR_ENG_FEED);
+			break;
+		case 2:
+			sprintf((char *)Config_buff,"SENSOR CFG:%s    ", SENSOR_ENG_TOC);
+			break;
+		case 3:
+			sprintf((char *)Config_buff,"SENSOR CFG:%s    ", SENSOR_ENG_ON);
+			break;
+		default:
+			break;
+		}
+        //sprintf((char *)Config_buff,"FEED SENSOR:%s    ",Display.cfg.cfg2.FEED_KEY ? FEED_ENG_ON : FEED_ENG_OFF);
+    }
+    else
+    {
+    	switch (Display.cfg.cfg2.SENSOR_CFG_KEY)
+		{
+		case 0:
+			sprintf((char *)Config_buff,"电极:%s    ", SENSOR_CH_OFF);
+			break;
+		case 1:
+			sprintf((char *)Config_buff,"电极:%s    ", SENSOR_CH_FEED);
+			break;
+		case 2:
+			sprintf((char *)Config_buff,"电极:%s    ", SENSOR_CH_TOC);
+			break;
+		case 3:
+			sprintf((char *)Config_buff,"电极:%s    ", SENSOR_CH_ON);
+			break;
+		default:
+			break;
+		}
+        //sprintf((char *)Config_buff,"进水电极:%s    ",Display.cfg.cfg2.FEED_KEY ? FEED_CH_ON : FEED_CH_OFF);
+    }
+	curFont->DrawText(xoff,yoff,"                       ",charColor,bkColor);
+    curFont->DrawText(xoff,yoff,Config_buff,charColor,bkColor);
+}
+
+
 void Disp_DrawSelChar(int xoff,int yoff,u8 *string,u16 pos ,u16 charColor,u16 bkColor)
 {
     uint8_t tmp;
@@ -3113,13 +3825,13 @@ void Disp_userSetDrawLanguage(int xoff,int yoff,u16 charColor,u16 bkColor)
     switch(Display.cfg.cfg1.language)
     {
     case DISP_LAN_ENGLISH:
-        strcpy((char *)Config_buff,"LANGUAGE/SPRACHE:ENGLISH");
+        strcpy((char *)Config_buff,"LANGUAGE:ENGLISH");
         break;
     case DISP_LAN_GERMANY:
-        strcpy((char *)Config_buff,"LANGUAGE/SPRACHE:DEUTSCH");
+        strcpy((char *)Config_buff,"LANGUAGE:DEUTSCH");
         break;
     default:
-        strcpy((char *)Config_buff,"LANGUAGE/语言:中文");
+        strcpy((char *)Config_buff,"语言:中文");
         break;
     }
    
@@ -3260,9 +3972,9 @@ void Disp_UserUpdate4FeedQuality(void)
 
 void Disp_UserSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffset)
 {
-    int xoff = 5;
-    int yoff = 5;
-    
+//20170516
+    int xoff = 10;   
+    int yoff = 8;   // int yoff = 15;
     int iLines = 0;
 
     uint8_t ucLineIdx = 0;
@@ -3353,7 +4065,17 @@ void Disp_UserSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffse
              Display.aucSetLine[ucItems++] = DISP_US_ITEM_FEED_QUALITY;
              yoff += 24;
              break;
-#endif             
+#endif        
+         case DISP_US_ITEM_FEED_KEY:
+		 	 if (DEV_TYPE_V1 == Display.cfg.cfg3.devtype)
+		 	 {
+                Disp_userSetDrawFeed_Key(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
+                Display.aucSetLine[ucItems++] = DISP_US_ITEM_FEED_KEY;
+                yoff += 24;
+                
+		 	 }
+			break;
+			 
          case DISP_US_ITEM_SERIAL_NO:
              Disp_userSetDrawSerialNo(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
              Display.aucSetLine[ucItems++] = DISP_US_ITEM_SERIAL_NO;
@@ -3387,43 +4109,49 @@ void Disp_engSetDrawCellConstant(int iChl,int xoff,int yoff,u16 charColor,u16 bk
     
     Disp_Int2floatFormat(Display.cfg.cfg1.CELLCONSTANT[iChl],1,3,buf);
 
-    switch(Display.cfg.cfg1.language)
+	switch(Display.cfg.cfg1.language)
     {
     case DISP_LAN_ENGLISH:
 #ifdef UF_FUNCTION        
         if (0 == iChl )strcpy((char *)Config_buff,"CELL CONST.UP:");
         if (1 == iChl )strcpy((char *)Config_buff,"CELL CONST.DI:");
-#else
-        if (0 == iChl )strcpy((char *)Config_buff,"CELL CONST   :");
-#endif
-#ifdef TOC            
+		
+#elif defined TOC   
+		if (0 == iChl )strcpy((char *)Config_buff,"CELL CONST.UP:");
+        if (1 == iChl )strcpy((char *)Config_buff,"CELL CONST.DI:");
         if (2 == iChl) strcpy((char *)Config_buff,"CELL CONST.TOC:");
-#endif         
+#else
+		if (0 == iChl )strcpy((char *)Config_buff,"CELL CONST :");
+#endif       
         break;
+
     case DISP_LAN_GERMANY:
 #ifdef UF_FUNCTION        
         if (0 == iChl )strcpy((char *)Config_buff,"ZELL KONST.UP:");
         if (1 == iChl )strcpy((char *)Config_buff,"ZELL KONST.DI:");
-#else
-        if (0 == iChl )strcpy((char *)Config_buff,"ZELL KONST   :");
-#endif
-#ifdef TOC            
+#elif defined TOC
+        if (0 == iChl )strcpy((char *)Config_buff,"ZELL KONST.UP:");
+        if (1 == iChl )strcpy((char *)Config_buff,"ZELL KONST.DI:");
         if (2 == iChl) strcpy((char *)Config_buff,"ZELL CONST.TOC:");
-#endif         
+#else
+		if (0 == iChl )strcpy((char *)Config_buff,"ZELL KONST :");
+#endif  
         break;
+
     default:
 #ifdef UF_FUNCTION        
         if (0 == iChl )strcpy((char *)Config_buff,"电极常数.上  :");
         if (1 == iChl )strcpy((char *)Config_buff,"电极常数.下  :");
-#else
-        if (0 == iChl )strcpy((char *)Config_buff,"电极常数     :");
-#endif
-#ifdef TOC            
+
+#elif defined TOC  
+		if (0 == iChl )strcpy((char *)Config_buff,"电极常数.上  :");
+        if (1 == iChl )strcpy((char *)Config_buff,"电极常数.下  :"); 
         if (2 == iChl) strcpy((char *)Config_buff,"电极常数.TOC :");
-#endif         
+#else
+        if (0 == iChl )strcpy((char *)Config_buff,"电极常数   :");
+#endif     
         break;
     }
-    
 
     curFont->DrawText(xoff,yoff,Config_buff,charColor,bkColor);
 
@@ -3454,33 +4182,39 @@ void Disp_engSetDrawTempConstant(int iChl,int xoff,int yoff,u16 charColor,u16 bk
 #ifdef UF_FUNCTION        
         if (0 == iChl) strcpy((char *)Config_buff,"TEMP CONST.UP:");
         if (1 == iChl) strcpy((char *)Config_buff,"TEMP CONST.DI:");
-#else
-        if (0 == iChl) strcpy((char *)Config_buff,"TEMP CONST   :");
-#endif
-#ifdef TOC            
+
+#elif defined TOC    
+		if (0 == iChl) strcpy((char *)Config_buff,"TEMP CONST.UP:");
+        if (1 == iChl) strcpy((char *)Config_buff,"TEMP CONST.DI:");
         if (2 == iChl) strcpy((char *)Config_buff,"TEMP CONST.TOC:");
+#else
+		if (0 == iChl) strcpy((char *)Config_buff,"TEMP CONST	:");
+
 #endif         
         break;
     case DISP_LAN_GERMANY:
 #ifdef UF_FUNCTION        
         if (0 == iChl) strcpy((char *)Config_buff,"TEMP KONST.UP:");
         if (1 == iChl) strcpy((char *)Config_buff,"TEMP KONST.DI:");
-#else
-        if (0 == iChl) strcpy((char *)Config_buff,"TEMP KONST   :");
-#endif
-#ifdef TOC            
+#elif defined TOC  
+		if (0 == iChl) strcpy((char *)Config_buff,"TEMP KONST.UP:");
+        if (1 == iChl) strcpy((char *)Config_buff,"TEMP KONST.DI:");
         if (2 == iChl) strcpy((char *)Config_buff,"TEMP CONST.TOC:");
+#else
+		if (0 == iChl) strcpy((char *)Config_buff,"TEMP KONST	:");
+
 #endif         
         break;
     default:
 #ifdef UF_FUNCTION        
         if (0 == iChl) strcpy((char *)Config_buff,"温补系数.上  :");
         if (1 == iChl) strcpy((char *)Config_buff,"温补系数.下  :");
+#elif defined TOC 
+		if (0 == iChl) strcpy((char *)Config_buff,"温补系数.上  :");
+        if (1 == iChl) strcpy((char *)Config_buff,"温补系数.下  :");
+        if (2 == iChl) strcpy((char *)Config_buff,"温补系数.TOC :");
 #else
         if (0 == iChl) strcpy((char *)Config_buff,"温补系数.    :");
-#endif
-#ifdef TOC            
-        if (2 == iChl) strcpy((char *)Config_buff,"温补系数.TOC :");
 #endif         
         break;
     }
@@ -3514,6 +4248,10 @@ void Disp_engSetDrawTempRange(int chl,int xoff,int yoff,u16 charColor,u16 bkColo
 #ifdef UF_FUNCTION        
             if (0 == chl) strcpy((char *)Config_buff,"TP.UP:");
             if (1 == chl) strcpy((char *)Config_buff,"TP.DI:");
+			
+#elif defined TOC
+            if (0 == chl) strcpy((char *)Config_buff,"TP.UP:");
+            if (1 == chl) strcpy((char *)Config_buff,"TP.DI:");
 #else
             if (0 == chl) strcpy((char *)Config_buff,"TEMP:");
 #endif
@@ -3522,6 +4260,9 @@ void Disp_engSetDrawTempRange(int chl,int xoff,int yoff,u16 charColor,u16 bkColo
         {
 #ifdef UF_FUNCTION        
             if (0 == chl) strcpy((char *)Config_buff,"TEMP.S.P.UP:");
+            if (1 == chl) strcpy((char *)Config_buff,"TEMP.S.P.DI:");
+#elif defined TOC
+			 if (0 == chl) strcpy((char *)Config_buff,"TEMP.S.P.UP:");
             if (1 == chl) strcpy((char *)Config_buff,"TEMP.S.P.DI:");
 #else
             if (0 == chl) strcpy((char *)Config_buff,"TEMP.S.P:");
@@ -3534,6 +4275,9 @@ void Disp_engSetDrawTempRange(int chl,int xoff,int yoff,u16 charColor,u16 bkColo
 #ifdef UF_FUNCTION        
             if (0 == chl) strcpy((char *)Config_buff,"温设.上:");
             if (1 == chl) strcpy((char *)Config_buff,"温设.下:");
+#elif defined TOC
+            if (0 == chl) strcpy((char *)Config_buff,"温设.上:");
+            if (1 == chl) strcpy((char *)Config_buff,"温设.下:");
 #else
             if (0 == chl) strcpy((char *)Config_buff,"温度设定:");
 #endif
@@ -3541,6 +4285,9 @@ void Disp_engSetDrawTempRange(int chl,int xoff,int yoff,u16 charColor,u16 bkColo
         else
         {
 #ifdef UF_FUNCTION        
+            if (0 == chl) strcpy((char *)Config_buff,"温度设定.上:");
+            if (1 == chl) strcpy((char *)Config_buff,"温度设定.下:");
+#elif defined TOC
             if (0 == chl) strcpy((char *)Config_buff,"温度设定.上:");
             if (1 == chl) strcpy((char *)Config_buff,"温度设定.下:");
 #else
@@ -3577,7 +4324,10 @@ void Disp_engSetDrawProductRs(int chl,int xoff,int yoff,u16 charColor,u16 bkColo
     case DISP_LAN_GERMANY:
 #ifdef UF_FUNCTION        
         if (0 == chl) sprintf((char *)Config_buff,"PROD RES.S.P.UP:%s"UNIT_TYPE_0,buf);
-        if (1 == chl) sprintf((char *)Config_buff,"PROD RES.S.P.DI:%s"UNIT_TYPE_0,buf);
+        if (1 == chl) sprintf((char *)Config_buff,"PROD RES.S.P.DI:%s"UNIT_TYPE_1,buf);
+#elif defined TOC
+        if (0 == chl) sprintf((char *)Config_buff,"PROD RES.S.P.UP:%s"UNIT_TYPE_0,buf);
+        if (1 == chl) sprintf((char *)Config_buff,"PROD RES.S.P.DI:%s"UNIT_TYPE_1,buf);
 #else
         if (0 == chl) sprintf((char *)Config_buff,"PROD RES.S.P:%s"UNIT_TYPE_0,buf);
 #endif
@@ -3585,11 +4335,14 @@ void Disp_engSetDrawProductRs(int chl,int xoff,int yoff,u16 charColor,u16 bkColo
     default:
 #ifdef UF_FUNCTION        
         if (0 == chl) sprintf((char *)Config_buff,"水质设定.上:%s "UNIT_TYPE_0,buf);
-        if (1 == chl) sprintf((char *)Config_buff,"水质设定.下:%s "UNIT_TYPE_0,buf);
-        break;
+        if (1 == chl) sprintf((char *)Config_buff,"水质设定.下:%s "UNIT_TYPE_1,buf);
+#elif defined TOC
+        if (0 == chl) sprintf((char *)Config_buff,"水质设定.上:%s "UNIT_TYPE_0,buf);
+        if (1 == chl) sprintf((char *)Config_buff,"水质设定.下:%s "UNIT_TYPE_1,buf);
 #else
         if (0 == chl) sprintf((char *)Config_buff,"水质设定   :%s "UNIT_TYPE_0,buf);
 #endif
+		break;
     }
     curFont->DrawText(xoff,yoff,Config_buff,charColor,bkColor);
 }
@@ -3809,8 +4562,9 @@ void Disp_engSetDrawUFAutoFlush(int xoff,int yoff,u16 charColor,u16 bkColor)
 
 void Disp_EngSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffSet)
 {
-    int xoff = 5;
-    int yoff = 5;
+//20170516
+    int xoff = 10;  
+    int yoff = 8;//int yoff = 15;
     int iLines = 0;
     uint8_t ucLineIdx = 0;
     uint8_t ucItems = 0;
@@ -3832,7 +4586,8 @@ void Disp_EngSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffSet
 #ifdef UF_FUNCTION            
         case DISP_ES_ITEM_CELL_CONSTANT2:
 #endif            
-#ifdef TOC            
+#ifdef TOC    
+		case DISP_ES_ITEM_CELL_CONSTANT2:
         case DISP_ES_ITEM_CELL_CONSTANT3:
 #endif            
             if (DEV_TYPE_V1 == Display.cfg.cfg3.devtype)
@@ -3846,7 +4601,8 @@ void Disp_EngSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffSet
 #ifdef UF_FUNCTION            
         case DISP_ES_ITEM_TEMP_CONSTANT2:
 #endif            
-#ifdef TOC            
+#ifdef TOC   
+		case DISP_ES_ITEM_TEMP_CONSTANT2:
         case DISP_ES_ITEM_TEMP_CONSTANT3:
 #endif            
             if (DEV_TYPE_V1 == Display.cfg.cfg3.devtype)
@@ -3859,7 +4615,12 @@ void Disp_EngSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffSet
         case DISP_ES_ITEM_TEMP_RANGE1:
 #ifdef UF_FUNCTION            
         case DISP_ES_ITEM_TEMP_RANGE2:    
-#endif            
+#endif 
+#ifdef TOC            
+		case DISP_ES_ITEM_TEMP_RANGE2:	  
+#endif
+
+
             if (DEV_TYPE_V1 == Display.cfg.cfg3.devtype)
             {
                 Disp_engSetDrawTempRange(ucLineIdx+ucLineOffSet - DISP_ES_ITEM_TEMP_RANGE1,xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
@@ -3870,7 +4631,11 @@ void Disp_EngSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffSet
         case DISP_ES_ITEM_PRODUCT_RS1:
 #ifdef UF_FUNCTION            
         case DISP_ES_ITEM_PRODUCT_RS2:
-#endif            
+#endif 
+#ifdef TOC            
+		case DISP_ES_ITEM_PRODUCT_RS2:
+#endif
+
             if (DEV_TYPE_V1 == Display.cfg.cfg3.devtype)
             {
                 Disp_engSetDrawProductRs(ucLineIdx+ucLineOffSet-DISP_ES_ITEM_PRODUCT_RS1,xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
@@ -4050,7 +4815,97 @@ void Disp_KeyHandler_idle_empty_tank(int key,int state)
         {
             // transer to idle
             Disp_PrepareMove2Idle();
+            key_em = 0;
+        }
+        break;
+    }
+}
 
+void Disp_KeyHandler_idle_UF_flush(int key,int state)
+{
+   
+    switch(key)
+    {
+    case KEY_CODE_NORMAL_K1: 
+        if (KEYSTATE_PRESSED == state)
+        {
+       
+            Disp_Prepare4Ntw();
+        }
+        break;
+    case KEY_CODE_RECURSIVE_K2:
+        {
+            uint8_t ls = keyboard_get_linestate();
+		     
+            if (KEYSTATE_PRESSED == state)
+            {    
+                if (((1<<KEY_CODE_RECURSIVE_K2)|(1<<KEY_CODE_QUANTITY_K3)) == ls)
+                {
+                    Display.KeyState |=  (1 << KEY_CODE_QUANTITY_K3) ;
+                    key_em = 0;
+                    Disp_Prepare4UserSet();
+                }
+                else
+                {
+                    key_em = 0;
+                    Disp_Prepare4Circulation();
+                }                    
+            }
+        }
+        break;
+    case KEY_CODE_QUANTITY_K3:
+        {
+            uint8_t ls = keyboard_get_linestate();
+            if (KEYSTATE_PRESSED == state)
+            {
+
+            
+                if (((1<<KEY_CODE_RECURSIVE_K2)|(1<<KEY_CODE_QUANTITY_K3)) == ls)
+                {
+                    Display.KeyState |=  (1 << KEY_CODE_RECURSIVE_K2) ;
+					 key_em = 0;
+                    Disp_Prepare4UserSet();
+                }
+                else if (((1<<KEY_CODE_SET_K4)|(1<<KEY_CODE_QUANTITY_K3)) == ls)
+                {
+                    Display.KeyState |=  (1 << KEY_CODE_SET_K4) ;
+					 key_em = 0;
+                    Disp_Prepare4EngSet();
+                }
+                else
+                {
+                    Display.tgtPage.ucMain = DISPLAY_PAGE_QUANTITY_TAKING_WATER;
+                    Display.tgtPage.ucSub  = DISPLAY_SUB_PAGE_QUANTITY_TAKING_WATER_SETTING;
+                     key_em = 0;
+                    Disp_Move2QtwSetting();
+                }
+            }
+        }
+        break;
+    case KEY_CODE_SET_K4:
+        {
+            uint8_t ls = keyboard_get_linestate();
+		    
+            if (KEYSTATE_PRESSED == state)
+            {
+                if (((1<<KEY_CODE_SET_K4)|(1<<KEY_CODE_QUANTITY_K3)) == ls)
+                {
+                    Display.KeyState |=  (1 << KEY_CODE_QUANTITY_K3) ;
+                     key_em = 0;
+                    Disp_Prepare4EngSet();
+                }
+                else
+                {
+                    // transfer state to idle@dec
+                    Display.tgtPage.ucMain = DISPLAY_PAGE_DECOMPRESSION;
+                    Display.tgtPage.ucSub  = DISPLAY_SUB_PAGE_IDLE;
+                    Display.TgtState.ucMain = DISPLAY_STATE_DECOMPRESSION;
+                    Display.TgtState.ucSub  = DISPLAY_SUB_STATE_IDLE;
+                    Disp_Move2Decompression();
+					key_em = 0;
+                }
+                    
+            }
         }
         break;
     }
@@ -4203,6 +5058,7 @@ void Disp_KeyHandler_cir_idle(int key,int state)
         if (KEYSTATE_PRESSED == state)
         {
             system_untimeout(&Display.to4cir);
+			key_toc = 0;
             
             Disp_PrepareMove2QtwSetting();
         }
@@ -4243,10 +5099,13 @@ void Disp_KeyHandler_toc(int key,int state)
     switch(Display.curPage.ucSub)
     {
     case DISPLAY_SUB_PAGE_IDLE:
+		Disp_KeyHandler_cir_idle(key,state);
         break;
     case DISPALY_SUB_PAGE_TOC_FLUSH:
+		Disp_KeyHandler_cir_idle(key,state);
         break;
     case DISPALY_SUB_PAGE_TOC_OXIDATION:
+		Disp_KeyHandler_cir_idle(key,state);
         break;
     }
 
@@ -4324,8 +5183,10 @@ void Disp_KeyHandler_uf_disinfection(int key,int state)
 
 void Disp_Us_ChangeSel(void)
 {
-    int xoff = 5;
-    int yoff = 5;
+   //20170516
+    int xoff = 10;
+   // int yoff = 15;
+   int yoff = 8;
 
     // calc Move Display Page
     if (Display.ucCurLine + 1 + Display.ucLineOffset >= DISP_US_ITEM_NUM)
@@ -4341,8 +5202,9 @@ void Disp_Us_ChangeSel(void)
         return;
     }
     
-
-    yoff = 5 + 24*Display.ucCurLine;
+  //20170516
+  //  yoff = 15 + 24*Display.ucCurLine;
+	  yoff = 8 + 24*Display.ucCurLine;
     Display.ucCurCol = 0XFF;
     Display.ucDispCol = 0X0;
 
@@ -4381,7 +5243,11 @@ void Disp_Us_ChangeSel(void)
     case DISP_US_ITEM_FEED_QUALITY:
         Disp_userSetDrawFeedQuality(xoff,yoff,Display.usForColor,Display.usBackColor4Set);
         break;
-#endif        
+#endif 
+    case DISP_US_ITEM_FEED_KEY://20170127
+		Disp_userSetDrawFeed_Key(xoff,yoff,Display.usForColor,Display.usBackColor4Set);
+		break;
+
     case DISP_US_ITEM_SERIAL_NO:
         Disp_userSetDrawSerialNo(xoff,yoff,Display.usForColor,Display.usBackColor4Set);
         break;
@@ -4389,8 +5255,8 @@ void Disp_Us_ChangeSel(void)
 
     Display.ucCurLine = (Display.ucCurLine + 1) % Display.ucTotalLine;
 
-    yoff = 5 + 24*Display.ucCurLine;
-
+    //yoff = 15 + 24*Display.ucCurLine;
+    yoff = 8 + 24*Display.ucCurLine;
     switch(Display.aucSetLine[Display.ucCurLine])
     {
     case DISP_US_ITEM_PACK:
@@ -4427,6 +5293,10 @@ void Disp_Us_ChangeSel(void)
         Disp_userSetDrawFeedQuality(xoff,yoff,LIGHTGREEN,Display.usBackColor4Set);
         break;
 #endif        
+    case DISP_US_ITEM_FEED_KEY: //20170117
+		Disp_userSetDrawFeed_Key(xoff,yoff,LIGHTGREEN,Display.usBackColor4Set);
+		break;
+
     case DISP_US_ITEM_SERIAL_NO:
         Disp_userSetDrawSerialNo(xoff,yoff,LIGHTGREEN,Display.usBackColor4Set);
         break;
@@ -4488,6 +5358,50 @@ void Disp_UserSetSetUnit(int key)
 
 }
 
+void Disp_UserSetSetFeed_Key(int key)
+{
+  //  Display.cfg.cfg2.FEED_KEY = !Display.cfg.cfg2.FEED_KEY;
+	
+	if (KEY_CODE_SET_K4 == key)
+    {
+        if (Display.cfg.cfg2.SENSOR_CFG_KEY >= 3)
+        {
+            Display.cfg.cfg2.SENSOR_CFG_KEY = 0;
+        }
+		else
+		{
+			Display.cfg.cfg2.SENSOR_CFG_KEY++;
+		}
+		
+
+    }
+
+	switch(Display.cfg.cfg2.SENSOR_CFG_KEY)
+	{
+	case 0:
+		Display.cfg.cfg2.FEED_KEY = 0;
+		Display.cfg.cfg2.TOC_SHOW = 0;
+	    Display.cfg.cfg2.TOC_FUN = 0;
+		break;
+	case 1:
+		Display.cfg.cfg2.FEED_KEY = 1;
+		Display.cfg.cfg2.TOC_SHOW = 0;
+		Display.cfg.cfg2.TOC_FUN = 0;
+		break;
+	case 2:
+		Display.cfg.cfg2.FEED_KEY = 0;
+		Display.cfg.cfg2.TOC_SHOW = 1;
+		Display.cfg.cfg2.TOC_FUN = 1;
+		break;
+	case 3:
+		Display.cfg.cfg2.FEED_KEY = 1;
+		Display.cfg.cfg2.TOC_SHOW = 1;
+		Display.cfg.cfg2.TOC_FUN = 1;
+		break;
+	default:
+		break;
+	}
+}
 
 void Disp_UserSetSetTime(int key)
 {
@@ -4767,6 +5681,7 @@ void Disp_UserSetUFFlush(int key)
 {
      if (KEY_CODE_SET_K4 != key)
      {
+         key_em = 0;
          return;
      }
 
@@ -4788,10 +5703,13 @@ void Disp_UserSetFeedQuality(int key)
 
 void Disp_Us_Set(int key)
 {
-    int xoff = 5;
-    int yoff = 5;
+//20170516
+    int xoff = 10;
+  //  int yoff = 15;
+    int yoff = 8;
 
-    yoff = 5 + 24*Display.ucCurLine;
+   // yoff = 15 + 24*Display.ucCurLine;
+	yoff = 8 + 24*Display.ucCurLine;
 
     switch(Display.aucSetLine[Display.ucCurLine])
     {
@@ -4829,6 +5747,10 @@ void Disp_Us_Set(int key)
         Disp_UserSetSetUnit(key);
         Disp_userSetDrawUnit(xoff,yoff,LIGHTGREEN,Display.usBackColor4Set);
         break;
+	case DISP_US_ITEM_FEED_KEY: //20170127
+		Disp_UserSetSetFeed_Key(key);
+        Disp_userSetDrawFeed_Key(xoff,yoff,LIGHTGREEN,Display.usBackColor4Set);
+		break;
 #ifdef TIME_FUNCTION    
     case DISP_US_ITEM_TIME:
         Disp_UserSetSetTime(key);
@@ -4856,29 +5778,35 @@ void Disp_Us_Set(int key)
 
 void Disp_CommSetSaveConfig(void)
 {
-   if (memcmp(&Display.cfg.cfg1,&gLocalCfg.cfg1,sizeof(LOCAL_CONFIG1_STRU))) 
+//	int iChl;
+	if (memcmp(&Display.cfg.cfg1,&gLocalCfg.cfg1,sizeof(LOCAL_CONFIG1_STRU))) 
+   	{
+       	memcpy(&gLocalCfg.cfg1,&Display.cfg.cfg1,sizeof(LOCAL_CONFIG1_STRU));
+
+       	Config_SetItem(APP_NV_LOCAL_CFG_1,sizeof(LOCAL_CONFIG1_STRU),&gLocalCfg.cfg1);
+   	}
+
+   	if (memcmp(&Display.cfg.cfg2,&gLocalCfg.cfg2,sizeof(LOCAL_CONFIG2_STRU))) 
+   	{
+
+       	memcpy(&gLocalCfg.cfg2,&Display.cfg.cfg2,sizeof(LOCAL_CONFIG2_STRU));
+
+       	Config_SetItem(APP_NV_LOCAL_CFG_2,sizeof(LOCAL_CONFIG2_STRU),&gLocalCfg.cfg2);
+   	}
+
+   	if (memcmp(&Display.cfg.cfg3,&gLocalCfg.cfg3,offsetof(LOCAL_CONFIG3_STRU,devtype))) 
+   	{
+
+       	memcpy(&gLocalCfg.cfg3,&Display.cfg.cfg3,offsetof(LOCAL_CONFIG3_STRU,devtype));
+
+       	Config_SetItem(APP_NV_LOCAL_CFG_3,sizeof(LOCAL_CONFIG3_STRU),&gLocalCfg.cfg3);
+   	}
+#if 0
+   for(iChl = 0; iChl < 3; iChl++)
    {
-       memcpy(&gLocalCfg.cfg1,&Display.cfg.cfg1,sizeof(LOCAL_CONFIG1_STRU));
-
-       Config_SetItem(APP_NV_LOCAL_CFG_1,sizeof(LOCAL_CONFIG1_STRU),&gLocalCfg.cfg1);
+	   setTOffset(iChl, Display.cfg.cfg1.TEMPCONSTANT[iChl]);
    }
-
-   if (memcmp(&Display.cfg.cfg2,&gLocalCfg.cfg2,sizeof(LOCAL_CONFIG2_STRU))) 
-   {
-
-       memcpy(&gLocalCfg.cfg2,&Display.cfg.cfg2,sizeof(LOCAL_CONFIG2_STRU));
-
-       Config_SetItem(APP_NV_LOCAL_CFG_2,sizeof(LOCAL_CONFIG2_STRU),&gLocalCfg.cfg2);
-   }
-
-   if (memcmp(&Display.cfg.cfg3,&gLocalCfg.cfg3,offsetof(LOCAL_CONFIG3_STRU,devtype))) 
-   {
-
-       memcpy(&gLocalCfg.cfg3,&Display.cfg.cfg3,offsetof(LOCAL_CONFIG3_STRU,devtype));
-
-       Config_SetItem(APP_NV_LOCAL_CFG_3,sizeof(LOCAL_CONFIG3_STRU),&gLocalCfg.cfg3);
-   }
-
+#endif
 }
 
 void Disp_Us_SetSaveConfig(void)
@@ -4965,6 +5893,24 @@ void Disp_SaveInfo(void)
    
 }
 
+void Disp_ResetInfo(void) //用于清除用水量20161018
+{
+
+
+   if (DEV_TYPE_V1 != Display.cfg.cfg3.devtype)
+   {
+       return;
+   }
+
+      
+   if (Display.bit1AuthState)
+   {
+       //Display.UsrInfo.data += ulTmp;//Display.ulCumulatedVolume;
+       Display.UsrInfo.data = 0; //用水量清零
+   }
+ 
+}
+
 void Disp_KeyHandler_us_idle(int key,int state)
 {
     switch(key)
@@ -5041,8 +5987,10 @@ void Disp_KeyHandler_us(int key,int state)
 
 void Disp_Es_ChangeSel(void)
 {
-    int xoff = 5;
-    int yoff = 5;
+//20170516
+    int xoff = 10;
+   // int yoff = 15;
+    int yoff = 8;
 
     int item;
 
@@ -5060,7 +6008,8 @@ void Disp_Es_ChangeSel(void)
         return;
     }
 
-    yoff = 5 + 24*Display.ucCurLine;
+    //yoff = 15 + 24*Display.ucCurLine;
+	yoff = 8 + 24*Display.ucCurLine;
     Display.ucCurCol = 0XFF;
 
     item = Display.aucSetLine[Display.ucCurLine];
@@ -5071,7 +6020,9 @@ void Disp_Es_ChangeSel(void)
 #ifdef UF_FUNCTION        
     case DISP_ES_ITEM_CELL_CONSTANT2:
 #endif        
-#ifdef TOC        
+#ifdef TOC    
+
+	case DISP_ES_ITEM_CELL_CONSTANT2:
     case DISP_ES_ITEM_CELL_CONSTANT3:
 #endif        
         Disp_engSetDrawCellConstant((item-DISP_ES_ITEM_CELL_CONSTANT1)/2,xoff,yoff,Display.usForColor,Display.usBackColor4Set);
@@ -5080,7 +6031,8 @@ void Disp_Es_ChangeSel(void)
 #ifdef UF_FUNCTION        
     case DISP_ES_ITEM_TEMP_CONSTANT2:
 #endif        
-#ifdef TOC        
+#ifdef TOC   
+	case DISP_ES_ITEM_TEMP_CONSTANT2:
     case DISP_ES_ITEM_TEMP_CONSTANT3:
 #endif        
         Disp_engSetDrawTempConstant((item-DISP_ES_ITEM_TEMP_CONSTANT1)/2,xoff,yoff,Display.usForColor,Display.usBackColor4Set);
@@ -5088,13 +6040,20 @@ void Disp_Es_ChangeSel(void)
     case DISP_ES_ITEM_TEMP_RANGE1:
 #ifdef UF_FUNCTION        
     case DISP_ES_ITEM_TEMP_RANGE2:
-#endif        
+#endif 
+#ifdef TOC        
+	case DISP_ES_ITEM_TEMP_RANGE2:
+#endif   
         Disp_engSetDrawTempRange(item-DISP_ES_ITEM_TEMP_RANGE1,xoff,yoff,Display.usForColor,Display.usBackColor4Set);
         break;
     case DISP_ES_ITEM_PRODUCT_RS1:
 #ifdef UF_FUNCTION        
     case DISP_ES_ITEM_PRODUCT_RS2:
-#endif        
+#endif  
+#ifdef TOC      
+	case DISP_ES_ITEM_PRODUCT_RS2:
+#endif 
+
         Disp_engSetDrawProductRs(item-DISP_ES_ITEM_PRODUCT_RS1,xoff,yoff,Display.usForColor,Display.usBackColor4Set);
         break;
     case DISP_ES_ITEM_PACK:
@@ -5124,8 +6083,8 @@ void Disp_Es_ChangeSel(void)
 
     Display.ucCurLine = (Display.ucCurLine + 1) % Display.ucTotalLine;
 
-    yoff = 5 + 24*Display.ucCurLine;
-
+   // yoff = 15 + 24*Display.ucCurLine;
+    yoff = 8 + 24*Display.ucCurLine;
     item = Display.aucSetLine[Display.ucCurLine];
 
     switch(item)
@@ -5134,7 +6093,8 @@ void Disp_Es_ChangeSel(void)
 #ifdef UF_FUNCTION        
     case DISP_ES_ITEM_CELL_CONSTANT2:
 #endif        
-#ifdef TOC        
+#ifdef TOC 
+	case DISP_ES_ITEM_CELL_CONSTANT2:
     case DISP_ES_ITEM_CELL_CONSTANT3:
 #endif        
         Disp_engSetDrawCellConstant((item-DISP_ES_ITEM_CELL_CONSTANT1)/2,xoff,yoff,LIGHTGREEN,Display.usBackColor4Set);
@@ -5143,7 +6103,8 @@ void Disp_Es_ChangeSel(void)
 #ifdef UF_FUNCTION        
     case DISP_ES_ITEM_TEMP_CONSTANT2:
 #endif        
-#ifdef TOC        
+#ifdef TOC  
+	case DISP_ES_ITEM_TEMP_CONSTANT2:
     case DISP_ES_ITEM_TEMP_CONSTANT3:
 #endif        
         Disp_engSetDrawTempConstant((item-DISP_ES_ITEM_TEMP_CONSTANT1)/2,xoff,yoff,LIGHTGREEN,Display.usBackColor4Set);
@@ -5152,13 +6113,21 @@ void Disp_Es_ChangeSel(void)
         
 #ifdef UF_FUNCTION        
     case DISP_ES_ITEM_TEMP_RANGE2:
-#endif        
+#endif  
+#ifdef TOC        
+	case DISP_ES_ITEM_TEMP_RANGE2:
+#endif 
+
         Disp_engSetDrawTempRange(item-DISP_ES_ITEM_TEMP_RANGE1,xoff,yoff,LIGHTGREEN,Display.usBackColor4Set);
         break;
     case DISP_ES_ITEM_PRODUCT_RS1:
 #ifdef UF_FUNCTION        
     case DISP_ES_ITEM_PRODUCT_RS2:
-#endif        
+#endif     
+#ifdef TOC        
+	case DISP_ES_ITEM_PRODUCT_RS2:
+#endif 
+
         Disp_engSetDrawProductRs(item-DISP_ES_ITEM_PRODUCT_RS1,xoff,yoff,LIGHTGREEN,Display.usBackColor4Set);
         break;
     case DISP_ES_ITEM_PACK:
@@ -5312,10 +6281,17 @@ void Disp_EngSetSetProductRs(int chl,int key)
     }
     else
     {
+       if(chl == 0)
+       {
         if (Display.cfg.cfg2.PROD_RES[chl] < 182)
         {
             Display.cfg.cfg2.PROD_RES[chl]++;
         }
+       }
+	   else if(chl == 1)
+	   	{
+	   	    Display.cfg.cfg2.PROD_RES[chl]++;
+	   	}
     }
 
 }
@@ -5470,10 +6446,17 @@ void Disp_EngSetSetRecirculationTime(int key)
 {
     if (KEY_CODE_SET_K4 == key)
     {
-        if (Display.cfg.cfg1.cirtime > 0)
+        #ifdef TOC
+        if (Display.cfg.cfg1.cirtime > 7)
         {
             Display.cfg.cfg1.cirtime--;
         }
+		#else
+		if (Display.cfg.cfg1.cirtime > 0)
+        {
+            Display.cfg.cfg1.cirtime--;
+        }
+		#endif
     }
     else
     {
@@ -5548,11 +6531,14 @@ void Disp_EngSetUFAutoFlush(int key)
 
 void Disp_Es_Set(int key)
 {
-    int xoff = 5;
-    int yoff = 5;
-    int item;
+//20170516
+    int xoff = 10;
+   // int yoff = 15;
+    int yoff = 8;
+	int item;
 
-    yoff = 5 + 24*Display.ucCurLine;
+   // yoff = 15 + 24*Display.ucCurLine;
+    yoff = 8 + 24*Display.ucCurLine;
 
       item = Display.aucSetLine[Display.ucCurLine];
     switch(item)
@@ -5561,7 +6547,8 @@ void Disp_Es_Set(int key)
 #ifdef UF_FUNCTION        
     case DISP_ES_ITEM_CELL_CONSTANT2:
 #endif        
-#ifdef TOC        
+#ifdef TOC    
+	case DISP_ES_ITEM_CELL_CONSTANT2:
     case DISP_ES_ITEM_CELL_CONSTANT3:
 #endif        
         Disp_EngSetSetCellConstant((item-DISP_ES_ITEM_CELL_CONSTANT1)/2,key);
@@ -5571,7 +6558,8 @@ void Disp_Es_Set(int key)
 #ifdef UF_FUNCTION        
     case DISP_ES_ITEM_TEMP_CONSTANT2:
 #endif
-#ifdef TOC        
+#ifdef TOC   
+	case DISP_ES_ITEM_TEMP_CONSTANT2:
     case DISP_ES_ITEM_TEMP_CONSTANT3:
 #endif        
         Disp_EngSetSetTempConstant((item-DISP_ES_ITEM_TEMP_CONSTANT1)/2,key);
@@ -5580,14 +6568,22 @@ void Disp_Es_Set(int key)
     case DISP_ES_ITEM_TEMP_RANGE1:
 #ifdef UF_FUNCTION        
     case DISP_ES_ITEM_TEMP_RANGE2:
-#endif        
+#endif 
+#ifdef TOC        
+	case DISP_ES_ITEM_TEMP_RANGE2:
+#endif
+
         Disp_EngSetSetTempRange(item-DISP_ES_ITEM_TEMP_RANGE1,key);
         Disp_engSetDrawTempRange(item-DISP_ES_ITEM_TEMP_RANGE1,xoff,yoff,LIGHTGREEN,Display.usBackColor4Set);
         break;
     case DISP_ES_ITEM_PRODUCT_RS1:
 #ifdef UF_FUNCTION        
     case DISP_ES_ITEM_PRODUCT_RS2:
-#endif        
+#endif  
+#ifdef TOC        
+	case DISP_ES_ITEM_PRODUCT_RS2:
+#endif
+
         Disp_EngSetSetProductRs(item-DISP_ES_ITEM_PRODUCT_RS1,key);
         Disp_engSetDrawProductRs(item-DISP_ES_ITEM_PRODUCT_RS1,xoff,yoff,LIGHTGREEN,Display.usBackColor4Set);
         break;
@@ -5702,14 +6698,15 @@ void Disp_KeyHandler_idle(int key,int state)
     switch(Display.curPage.ucSub)
     {
     case DISPLAY_SUB_PAGE_IDLE:
+		Disp_KeyHandler_idle_idle(key,state);
+        break;
     case DISPLAY_SUB_PAGE_IDLE_FLUSH:
-        Disp_KeyHandler_idle_idle(key,state);
+        Disp_KeyHandler_idle_UF_flush(key,state);
         break;
     default:
         Disp_KeyHandler_idle_empty_tank(key,state);
         break;
     }
-
 }
 
 void Disp_KeyHandler(int key,int state)
@@ -5734,8 +6731,14 @@ void Disp_KeyHandler(int key,int state)
             return;
         }
 
+//20170516修改定量取水长按键增减
+/*
         if (DISPLAY_PAGE_USER_SET != Display.curPage.ucMain
             && DISPLAY_PAGE_ENG_SET != Display.curPage.ucMain)
+*/
+        if (DISPLAY_PAGE_USER_SET != Display.curPage.ucMain
+            && DISPLAY_PAGE_ENG_SET != Display.curPage.ucMain
+            && DISPLAY_PAGE_QUANTITY_TAKING_WATER != Display.curPage.ucMain)
         {
             Display.KeyState |=  (1 << key) ;
         }
@@ -5796,7 +6799,7 @@ void Disp_Prepare4Qtw(void)
         Display.tgtPage.ucSub  = DISPLAY_SUB_PAGE_TANK_EMPTY;
         Display.TgtState.ucMain = DISPLAY_STATE_IDLE;
         Display.TgtState.ucSub  = DISPLAY_SUB_STATE_IDLE;
-
+        key_em = 1;
         Disp_Move2TankEmpty();
     }
     else
@@ -5924,8 +6927,27 @@ void Disp_RemoteHandler_circular(int key,int data)
         Disp_RemoteHandler_cir_idle(key,data);
         break;
     case DISPALY_SUB_PAGE_TOC_FLUSH:
+		Disp_RemoteHandler_cir_idle(key,data); //20160929
         break;
     case DISPALY_SUB_PAGE_TOC_OXIDATION:
+		Disp_RemoteHandler_cir_idle(key,data);//20160929
+        break;
+    }
+
+}
+
+void Disp_RemoteHandler_toc(int key,int data)
+{
+    switch(Display.curPage.ucSub)
+    {
+    case DISPLAY_SUB_PAGE_IDLE:
+        Disp_RemoteHandler_cir_idle(key,data);
+        break;
+    case DISPALY_SUB_PAGE_TOC_FLUSH:
+		Disp_RemoteHandler_cir_idle(key,data); //20160929
+        break;
+    case DISPALY_SUB_PAGE_TOC_OXIDATION:
+		Disp_RemoteHandler_cir_idle(key,data);//20160929
         break;
     }
 
@@ -6066,6 +7088,9 @@ void Disp_RemoteHandler(int key,int data)
     case DISPLAY_PAGE_DECOMPRESSION:
         Disp_RemoteHandler_dec(key,data);
         break;
+	case DISPLAY_PAGE_TOC:
+		Disp_RemoteHandler_toc(key,data);
+		break;
     }
 }
 
@@ -6074,16 +7099,22 @@ void Disp_RemoteHandler(int key,int data)
 void Disp_ReadConfig(void)
 {
 
-    memcpy(&Display.cfg,&gLocalCfg,sizeof(gLocalCfg));
+    memcpy(&Display.cfg, &gLocalCfg, sizeof(gLocalCfg));
 
     if (INVALID_CONFIG_VALUE_LONG == Display.cfg.cfg1.cirtime)
     {
-        Display.cfg.cfg1.cirtime = 3; // default 3minute
+        //Display.cfg.cfg1.cirtime = 3; // default 3minute
+       #ifdef TOC
+        Display.cfg.cfg1.cirtime = 7; //20161102
+       #else
+	    Display.cfg.cfg1.cirtime = 3;
+	   #endif
+       
     }
 
     if (INVALID_CONFIG_VALUE_LONG == Display.cfg.cfg1.language)
     {
-        Display.cfg.cfg1.language = DISP_LAN_GERMANY;
+        Display.cfg.cfg1.language = DISP_LAN_ENGLISH;
     }
 
 
@@ -6116,7 +7147,18 @@ void Disp_ReadConfig(void)
         
             if (INVALID_CONFIG_VALUE_LONG == Display.cfg.cfg2.PROD_RES[iChl])
             {
-                Display.cfg.cfg2.PROD_RES[iChl] = 150; // DECIMAL 15.0
+				switch (iChl)
+				{
+				case 0:
+					Display.cfg.cfg2.PROD_RES[iChl] = 150; // DECIMAL 15.0
+					break;
+				case 1:
+					Display.cfg.cfg2.PROD_RES[iChl] = 500; // DECIMAL 15.0
+					break;
+				default:
+					break;
+				}
+                //Display.cfg.cfg2.PROD_RES[iChl] = 150; // DECIMAL 15.0
             }
         }
     }
@@ -6126,16 +7168,16 @@ void Disp_ReadConfig(void)
     }
     if (INVALID_CONFIG_VALUE_SHORT == Display.cfg.cfg2.PACKLIFEL)
     {
-        Display.cfg.cfg2.PACKLIFEL = 3000; // 
+        Display.cfg.cfg2.PACKLIFEL = 3500; // 
     }
 
     if (INVALID_CONFIG_VALUE_SHORT == Display.cfg.cfg2.FILTERLIFE)
     {
-        Display.cfg.cfg2.FILTERLIFE = 180; // 
+        Display.cfg.cfg2.FILTERLIFE = 360; // 
     }
     if (INVALID_CONFIG_VALUE_SHORT == Display.cfg.cfg2.UVLIFEDAY)
     {
-        Display.cfg.cfg2.UVLIFEDAY = 360; // 
+        Display.cfg.cfg2.UVLIFEDAY = 720; // 
     }
     if (INVALID_CONFIG_VALUE_SHORT == Display.cfg.cfg2.UVLIFEHOUR)
     {
@@ -6146,6 +7188,14 @@ void Disp_ReadConfig(void)
     {
         Display.cfg.cfg2.UNIT = 0; // M
     }
+	
+	if(INVALID_CONFIG_VALUE_SHORT == Display.cfg.cfg2.SENSOR_CFG_KEY)
+	{
+		Display.cfg.cfg2.SENSOR_CFG_KEY = 3;
+		Display.cfg.cfg2.FEED_KEY = 1; // on
+		Display.cfg.cfg2.TOC_SHOW = 1; // OFF
+        Display.cfg.cfg2.TOC_FUN = 1;  //检测TOC
+	}
 
     if (INVALID_CONFIG_VALUE_SHORT == Display.cfg.cfg2.FLOW)
     {
@@ -6168,7 +7218,7 @@ void Disp_ReadConfig(void)
 
     if (INVALID_CONFIG_VALUE_SHORT == Display.cfg.cfg3.usTocWashTime)
     {
-        Display.cfg.cfg3.usTocWashTime = 180; // second
+        Display.cfg.cfg3.usTocWashTime = 160; // second
     }  
 
     if (INVALID_CONFIG_VALUE_SHORT == Display.cfg.cfg3.usTocOxiTime)
@@ -6199,22 +7249,23 @@ void Disp_ReadConfig(void)
     Display.ulCalcirtime = Display.cfg.cfg1.cirtime*DISP_MINUTE2MS;
     
 #ifdef TOC
-    if (Display.ulCalcirtime  > 1000*(Display.cfg.cfg3.usTocOxiTime + Display.cfg.cfg3.usUFCleanTime*2))
-    {
-        Display.ulCalcirtime -= 1000*(Display.cfg.cfg3.usTocOxiTime + Display.cfg.cfg3.usUFCleanTime*2);
-    }
-    else
-    {
-        Display.ulCalcirtime = 1000*(Display.cfg.cfg3.usTocOxiTime + Display.cfg.cfg3.usUFCleanTime*2) + 3*DISP_MINUTE2MS;
-    }
+     Display.ulCalcirtime -= 1000*360; //355
+     Display.ulCalcirtime /= 2;
 #endif
+
 
 #ifdef DISP_UF_TEST
     Display.cfg.usUFCleanTime = 1; // DAY
 #endif
 
-    // end add for v2
     // more to add here
+#if 0
+    int iLoop;
+    for(iLoop = 0; iLoop < 3; iLoop++)
+    {
+    	setTOffset(iLoop, Display.cfg.cfg1.TEMPCONSTANT[iLoop]);
+    }
+#endif
    
 }
 
@@ -6222,7 +7273,6 @@ void Disp_UpdateConfig(void)
 {
     Disp_ReadConfig();
 }
-
 
 uint8_t Disp_GetNextAdcChl(void)
 {
@@ -6378,9 +7428,11 @@ void Disp_SecondTask(void)
             {
                 Display.ulIdleFlushCnt++;
 
-                if (Display.ulIdleFlushCnt >= Display.cfg.usUFFlushTime)
+                if (Display.ulIdleFlushCnt >= Display.cfg.cfg3.usUFFlushTime)
                 {
                     Disp_PrepareMove2Idle();
+					key_em = 0;
+
                 }
                 else
                 {
@@ -6401,7 +7453,7 @@ void Disp_SecondTask(void)
 #ifdef UF_FUNCTION        
             Display.ulIdleFlushTime++;
 
-            if (Display.ulIdleFlushTime >= (Display.cfg.usAutoUFFlushTime*60))
+            if (Display.ulIdleFlushTime >= (Display.cfg.cfg3.usAutoUFFlushTime*60))
             {
                 if (DISPLAY_PAGE_IDLE == Display.curPage.ucMain
                     && DISPLAY_SUB_PAGE_IDLE == Display.curPage.ucSub)
@@ -6415,11 +7467,9 @@ void Disp_SecondTask(void)
 
             if (Display.usIdleLcdTimes >= DISP_LCD_DORMANT_TIME)
             {
-            	/*
-                LCD_EnableBackLight(FALSE);
-
+                //LCD_EnableBackLight(FALSE);
+				LCD_EnableBackLight(TRUE);
                 Display.usIdleLcdTimes = 0;
-                */
             }
         }     
 
@@ -6464,8 +7514,9 @@ void Disp_SecondTask(void)
 
                 sLastUpdateTime = timer;
             }
-
-            Disp_CheckUFClean();            
+#ifdef UF_FUNCTION
+            Disp_CheckUFClean();  
+#endif
             // end for V2
             
         }
@@ -6512,6 +7563,33 @@ void Disp_Invalidate(void)
     case DISPLAY_PAGE_CIRCULATION:
         Disp_CirculationInitPage();
         break;
+#ifdef TOC
+	case DISPLAY_PAGE_TOC:
+		{
+			if(Display.curPage.ucSub == DISPALY_SUB_PAGE_TOC_FLUSH)
+			{
+				Disp_TOCFlushPage();
+				break;
+			}
+			else if(Display.curPage.ucSub == DISPALY_SUB_PAGE_TOC_OXIDATION)
+			{
+				Disp_TOCOxidatePage();
+				break;
+			}
+			else
+			{
+				break;
+			}
+				
+		}
+#endif
+/*
+	case DISPLAY_PAGE_USER_SET:
+		Disp_UserSetInitPage(0,0XFF,0);
+		break;
+	case DISPLAY_PAGE_ENG_SET:
+		Disp_EngSetInitPage(0,0XFF,0);
+		break;	*/
     case DISPLAY_PAGE_NORMAL_TAKING_WATER:
         Disp_NtwInitPage();
         break;
@@ -6648,6 +7726,25 @@ end:
         
 }
 
+//20170911添加此函数动态设置循环时间
+void Disp_Set_Cirtime(void)
+{
+    Display.ulCalcirtime = Display.cfg.cfg1.cirtime*DISP_MINUTE2MS;
+   
+//2017-1-17 TOC:6min
+#ifdef TOC
+	if(1 == Display.cfg.cfg2.TOC_FUN)
+	{
+		Display.ulCalcirtime -= 1000*360; //355
+    	Display.ulCalcirtime /= 2;
+	}
+    else
+    {
+    	Display.ulCalcirtime = 1000 * 180; //
+    }
+#endif
+}
+
 void Disp_Adc_proc(void)
 {
   //unsigned int time_needed;
@@ -6688,7 +7785,7 @@ void Disp_Adc_proc(void)
           {
           case DISPLAY_SENSOR_1:
           case DISPLAY_SENSOR_2:
-              {
+          {
                     
                 int flags = 0;
 
@@ -6711,17 +7808,22 @@ void Disp_Adc_proc(void)
                 if (flags & ((1 << DISPLAY_STATE_CIRCULATION) 
                              | (1 << DISPLAY_STATE_NORMAL_TAKING_WATER)
                              | (1 << DISPLAY_STATE_QUANTITY_TAKING_WATER)
-                             | (1 << DISPLAY_STATE_TOC)))
+                             | (1 << DISPLAY_STATE_TOC)
+                             | (1 << DISPLAY_STATE_IDLE)))
                 {
+                    
+                	if (flags &((1 << DISPLAY_STATE_CIRCULATION)
+							 |(1 << DISPLAY_STATE_TOC)))  //20170626修改进水电导显示()
                     {
-                        if (flags & (1 << DISPLAY_STATE_CIRCULATION))
-                        {
-                           Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,1);
-                        }
-                        else
-                        {
-                           Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,3);
-                        }
+                    	Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,1);
+					}
+					else if( key_em == 1)
+					{
+						Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,0);
+					}
+                    else
+                    {
+                        Disp_Sensors(SENSOR_COORD_X,SENSOR_COORD_Y,3);
                     }
 
                     // check alarm
@@ -6751,7 +7853,9 @@ void Disp_Adc_proc(void)
                     {
                         if (DISPLAY_SENSOR_2 == iChl)
                         {
-                            if ((Display.iConductivity[DISPLAY_SENSOR_2]/100) <= Display.cfg.cfg2.PROD_RES[0])
+                            //if ((Display.iConductivity[DISPLAY_SENSOR_2]/100) <= Display.cfg.cfg2.PROD_RES[0])
+                            if ((Display.iConductivity[DISPLAY_SENSOR_2]/100) > Display.cfg.cfg2.PROD_RES[1]
+								&&Display.cfg.cfg2.FEED_KEY == 1) //进水水质报警条件
                             {
                                 Disp_SetAlarm(DISP_ALARM_PRODUCT_RS1,TRUE);
                             }
@@ -6759,22 +7863,25 @@ void Disp_Adc_proc(void)
                             {
                                 Disp_SetAlarm(DISP_ALARM_PRODUCT_RS1,FALSE);
                             }
-                        
+                            /*进水温度报警*/
+							Disp_SetAlarm(DISP_ALARM_TEMPERATURE1,FALSE);
+							/*
                             if ((Display.iTemperature[DISPLAY_SENSOR_2]/1000) > Display.cfg.cfg2.TEMP_MAX[0]
                                 || (Display.iTemperature[DISPLAY_SENSOR_2]/1000) < Display.cfg.cfg2.TEMP_MIN[0])
                             {
                                 Disp_SetAlarm(DISP_ALARM_TEMPERATURE1,TRUE);
                             }
+                            
                             else
                             {
                                 Disp_SetAlarm(DISP_ALARM_TEMPERATURE1,FALSE);
                             }   
-
+                             */
                             Disp_UserUpdate4FeedQuality();
                         }
                     }
                 }
-              }                                
+          }                                
               break;
           case DISPLAY_SENSOR_TOC:
               if (DISPLAY_STATE_TOC == Display.CurState.ucMain)
@@ -7251,7 +8358,12 @@ uint8 Disp_DataHandler(uint8 *pCmd,uint8 *pRsp,uint8 CmdLen,uint8 *pucRspLen)
 		 	if(Display.bit1AuthState)
             {
                 int tmp;
-                pRsp[0] = 5;//LEN
+				// pRsp[0] = 5;//LEN
+				#ifdef TOC_APP
+                   pRsp[0] = 9;
+				#else
+				   pRsp[0] = 5;
+				#endif
                 pRsp[1] = ucCmd;
                         
                 tmp = Display.iConductivity[0];
@@ -7264,8 +8376,24 @@ uint8 Disp_DataHandler(uint8 *pCmd,uint8 *pRsp,uint8 CmdLen,uint8 *pucRspLen)
                 tmp = Display.iTemperature[0];
                 pRspData[3] = (tmp & 0XFF);
                 pRspData[4] = ((tmp >>  8) & 0XFF);
+				
+                /*  电导率，TOC发送 20161018 */
+				#ifdef TOC_APP
+				  tmp = Display.iConductivity[1];
+                  pRspData[5] = (tmp & 0XFF);
+                  pRspData[6] = ((tmp >>  8) & 0XFF);
 
-                *pucRspLen += 7;
+				  tmp = (int)(Display.iConductivity[2]/10); //20161229
+                  pRspData[7] = (tmp & 0XFF);
+                  pRspData[8] = ((tmp >>  8) & 0XFF);
+				#endif
+				
+             // *pucRspLen += 7; //20161018
+				#ifdef TOC_APP
+                  *pucRspLen += 11;
+				#else
+                  *pucRspLen += 7; 
+				#endif
                 return 0;
             }
             return 0xF3;
@@ -7460,8 +8588,8 @@ void Disp_Init(void)
                                                |(1<<DISPLAY_STATE_CIRCULATION)
                                                |(1<<DISPLAY_STATE_NORMAL_TAKING_WATER)
                                                |(1<<DISPLAY_STATE_QUANTITY_TAKING_WATER)
-                                               |(1<<DISPLAY_STATE_TOC)
-                                               |(1<<DISPLAY_STATE_DEGASS);
+                                               |(0<<DISPLAY_STATE_TOC)   // 1 TOC过程不检测通道1
+                                               |(1<<DISPLAY_STATE_DEGASS); 
 
     Display.ucChlMask |= 1<<DISPLAY_SENSOR_1; 
 
@@ -7477,12 +8605,20 @@ void Disp_Init(void)
 #endif
 
 #ifdef TOC
-    Display.ausSampleMask[DISPLAY_SENSOR_TOC] = (0<<DISPLAY_STATE_IDLE)
-                                               |(1<<DISPLAY_STATE_CIRCULATION)
-                                               |(1<<DISPLAY_STATE_NORMAL_TAKING_WATER)
-                                               |(1<<DISPLAY_STATE_QUANTITY_TAKING_WATER)
+	 Display.ausSampleMask[DISPLAY_SENSOR_2] =	(1<<DISPLAY_STATE_IDLE) //1
+												|(0<<DISPLAY_STATE_CIRCULATION) //0
+												|(1<<DISPLAY_STATE_NORMAL_TAKING_WATER)  //1
+												|(1<<DISPLAY_STATE_QUANTITY_TAKING_WATER)  //1
+												|(0<<DISPLAY_STATE_TOC)
+												|(0<<DISPLAY_STATE_DEGASS);
+	Display.ucChlMask |= 1<<DISPLAY_SENSOR_2;
+
+    Display.ausSampleMask[DISPLAY_SENSOR_TOC] = (0<<DISPLAY_STATE_IDLE)   //0
+                                               |(0<<DISPLAY_STATE_CIRCULATION)
+                                               |(0<<DISPLAY_STATE_NORMAL_TAKING_WATER)// 产水时不检测通道3
+                                               |(0<<DISPLAY_STATE_QUANTITY_TAKING_WATER) // 不检测通道3
                                                |(0<<DISPLAY_STATE_TOC) // leave to TOC proc
-                                               |(1<<DISPLAY_STATE_DEGASS);
+                                               |(0<<DISPLAY_STATE_DEGASS);
     Display.ucChlMask |= 1<<DISPLAY_SENSOR_TOC; 
 #endif
 
@@ -7538,6 +8674,9 @@ void Disp_Init(void)
         rectTime.top      = TIME_RECT_MARGIN ;
         rectTime.bottom   = rectTime.top + curFont->sizeY + TIME_RECT_MARGIN*2;
     }
+	
+	Display.iToc = 2.0*1000;
+	
     Disp_ReadConfig();
     Disp_ReadInfo();
     Disp_ReadQtwVolume();
@@ -7547,7 +8686,9 @@ void Disp_Init(void)
     Disp_DisplayWelcomePage();
 
     // begin add for v2
-    Disp_CheckUFClean();    
+#ifdef UF_FUNCTION
+    Disp_CheckUFClean(); 
+#endif
     // end add for v2
 
     {

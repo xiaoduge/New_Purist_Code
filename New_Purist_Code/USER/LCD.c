@@ -820,6 +820,7 @@ void LCD_PutString12x24(u16 x,u16 y,char *string,u16 charColor,u16 bkColor)
 
 #define pgm_read_byte(p)(*p)
 
+#if 0
 void LCD_PutChar24x48(u16 x,u16 y,u8 c,u16 charColor,u16 bkColor)
 {
     u16 i=0;
@@ -851,6 +852,45 @@ void LCD_PutChar24x48(u16 x,u16 y,u8 c,u16 charColor,u16 bkColor)
     }
     Set_nCs();                  
 }
+#endif
+
+void LCD_PutChar24x48(u16 x,u16 y,u8 c,u16 charColor,u16 bkColor)
+{
+    u16 i=0;
+    u16 j=0;
+    
+    u8 m = 0;
+  
+    const u8 *pdata = &ascii_24x48[(c-0x20)*144];
+    
+    Clr_nCs();                  
+    
+    //LCD_AddressSet(x,y,x+24-1,y+48-1);  
+    
+    for(i  =0; i < 48; i++)
+    {
+        //m = pgm_read_byte(&pdata[i]);//提取c字符的第i个字节以,c减去0x20是由于Ascii码库中的0~1f被去掉
+        int col;
+    	for (col = 0; col < 3; col ++)
+    	{
+            m = pgm_read_byte(&pdata[i*3+col]);
+            for(j=0;j<8;j++)
+            {                       
+                if((m&0x80)==0x80) 
+                {                                    
+                   LCD_SetPoint(x+j+col*8,y+i,charColor);
+                }
+                else 
+                {
+                    LCD_SetPoint(x+j+col*8,y+i,bkColor);
+                }
+                m<<=1;                                //左移1位，准备写下一位
+            }
+        }
+    }
+    Set_nCs();                  
+}
+
 
 void LCD_PutString24x48(u16 x,u16 y,char *string,u16 charColor,u16 bkColor)
 {
@@ -1082,11 +1122,13 @@ void PutGB4848(u16 x, u16  y, u8 c[2], u16 fColor,u16 bColor)
                 {
                     if((m&0x80)==0x80) 
                     {
-                        LCD_WR_DATA(fColor);
+                        //LCD_WR_DATA(fColor);
+                        LCD_WR_DATA2(fColor);
                     }
                     else 
                     {
-                        LCD_WR_DATA(bColor);
+                        //LCD_WR_DATA(bColor);
+                        LCD_WR_DATA2(bColor);
                     }
                     m<<=1;
                 } 

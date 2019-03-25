@@ -1320,6 +1320,204 @@ void Disp_DisplayIdlePage(void)
 
 int Disp_Sensors_Item(int chl,int big,int mask,int xoff,int yoff)
 {
+	char buf[16];
+	u16 usBackColor = Display.usBackColor;
+	int iOrgYoff = yoff;
+	
+	if (mask & 0x1)
+	{
+		if (DISPLAY_SENSOR_2 == chl)
+		{
+			int iXSize ;
+			if(0 == Display.cfg.cfg2.FEED_KEY)
+			{
+				switch(Display.cfg.cfg1.language)
+				{
+				case DISP_LAN_ENGLISH:
+					strcpy(buf,"  ");
+					break;
+				case DISP_LAN_GERMANY:
+					strcpy(buf,"  ");
+					break;
+				default : 
+					strcpy(buf,"  ");
+					break;
+				}
+			}
+			else
+			{
+				switch(Display.cfg.cfg1.language)
+				{
+				case DISP_LAN_ENGLISH:
+					strcpy(buf,"Feed	 ");
+					break;
+				case DISP_LAN_GERMANY:
+					strcpy(buf,"Eingang ");
+					break;
+				default : 
+					strcpy(buf,"进水    ");
+					break;
+				}
+			}
+			iXSize = (strlen((char *)buf) + (11))*curFont-> sizeX;
+			if (xoff + iXSize >= LCD_W)
+			{
+				xoff -= ((xoff + iXSize - LCD_W) + 5);
+			}
+				//不显示TOC,进水电导上移一行
+			if((DISPLAY_SENSOR_2 == chl) && (1 != Display.cfg.cfg2.TOC_SHOW) )
+			{
+				curFont->DrawText(xoff-40,yoff-30,(u8 *)buf,BLACK,usBackColor);
+			}
+			else
+			{
+				curFont->DrawText(xoff-40,yoff,(u8 *)buf,BLACK,usBackColor);//
+			}
+			iXSize = strlen((char *)buf)*curFont->sizeX;			
+			xoff += iXSize - 5;
+		}
+				   
+        if (0 == Display.cfg.cfg2.UNIT && DISPLAY_SENSOR_1 == chl) //DISPLAY_SENSOR_1 == chl
+		{
+			if (Display.iConductivity[chl] >= LOW_RES)
+			{
+				Disp_Int2floatFormat((Display.iConductivity[chl] + 50)/100,2,1,buf);
+			}
+			else
+			{
+				strcpy(buf," < 1");
+			}		
+			sprintf((char *)Config_buff,"%s",buf);
+		}
+		else if(1 == Display.cfg.cfg2.UNIT && DISPLAY_SENSOR_1 == chl)
+		{
+			uint32_t fus = (1000*1000)/Display.iConductivity[chl];
+			Disp_Int2floatFormat(fus,1,3,buf);
+			sprintf((char *)Config_buff,"%s",buf);
+		}
+		//进水电导率值
+		else
+		{
+			uint32_t fus = (Display.iConductivity[chl]+5)/100; //20160922
+			Disp_Int2floatFormat(fus,1,1,buf);
+			sprintf((char *)Config_buff,"%s",buf); 
+		}				
+#ifdef CODEGB_48  
+		if (big) Disp_SelectFont(&font48);	
+#endif
+		if (DISPLAY_SENSOR_1 == chl)
+		{
+			curFont->DrawText(xoff,yoff,Config_buff,BLACK,usBackColor);
+		}
+			 //进水电导不显示
+		else if((DISPLAY_SENSOR_2 == chl) && (0 == Display.cfg.cfg2.FEED_KEY) ) 
+		{
+			//FEED_KEY == 0 不显示进水电导率值
+		}
+		//TOC不显示
+		else if((DISPLAY_SENSOR_2 == chl) && (1 != Display.cfg.cfg2.TOC_SHOW) )
+		{
+			curFont->DrawText(xoff-35,yoff - 30,Config_buff,BLACK,usBackColor);
+		}
+		//显示TOC,进水电导
+		else 
+		{
+			curFont->DrawText(xoff-35,yoff,Config_buff,BLACK,usBackColor);
+		}
+		xoff += strlen((char *)Config_buff)*curFont->sizeX;
+		yoff += curFont->sizeY;
+		
+#ifdef CODEGB_48    
+		if (big) Disp_SelectFont(oldfont);	
+#endif    
+		yoff -= curFont->sizeY;
+		if (0 == Display.cfg.cfg2.UNIT && DISPLAY_SENSOR_1 == chl) //DISPLAY_SENSOR_1 == chl
+		{
+			sprintf((char *)Config_buff," %s",UNIT_TYPE_0);
+		}
+		else
+		{
+			sprintf((char *)Config_buff,"%s",UNIT_TYPE_1);
+		}
+		
+		if (DISPLAY_SENSOR_1 == chl)
+		{
+			curFont->DrawText(xoff,yoff,Config_buff,BLACK,usBackColor);
+		}
+		else if((DISPLAY_SENSOR_2 == chl) && (0 == Display.cfg.cfg2.FEED_KEY))
+		{
+			//FEED_KEY == 0 不显示进水电导率单位
+		}
+		//不显示TOC，进水电导上移一行
+		else if((DISPLAY_SENSOR_2 == chl) && (1 != Display.cfg.cfg2.TOC_SHOW) )
+		{
+			curFont->DrawText(xoff-35,yoff-30,Config_buff,BLACK,usBackColor);
+		}
+		else
+		{
+			curFont->DrawText(xoff-35,yoff,Config_buff,BLACK,usBackColor);
+		}
+		yoff += 30;
+	}
+	  
+	if (mask & 0x2)
+	{
+		Disp_Int2floatFormat((Display.iTemperature[chl] + 50)/100,1,1,buf);
+		switch(Display.cfg.cfg1.language)
+		{
+		case DISP_LAN_ENGLISH:
+			sprintf((char *)Config_buff,"Temp.	 %s℃",buf);
+			break;
+		case DISP_LAN_GERMANY:
+			sprintf((char *)Config_buff,"Temp.	 %s℃",buf);
+			break;
+		default : // DISP_LAN_GERMANY
+			sprintf((char *)Config_buff,"水温    %s℃",buf);
+			break;
+		}
+#ifdef CODEGB_48 
+		if(DISPLAY_STATE_TOC != Display.CurState.ucMain && big == TRUE)
+			curFont->DrawText(xoff-140,yoff,Config_buff,BLACK,usBackColor);
+		else
+			curFont->DrawText(xoff-90,yoff,Config_buff,BLACK,usBackColor);
+#else
+		curFont->DrawText(xoff-90,yoff,Config_buff,BLACK,usBackColor);
+#endif  
+		yoff += 30;
+	}
+	
+	if ((mask & 0x8) && (1 == Display.cfg.cfg2.TOC_SHOW)) //toc
+	{	 
+		if(Display.iConductivity[chl] == 0)
+		{
+			sprintf((char *)Config_buff,"TOC 	0 ppb");
+			curFont->DrawText(xoff-40,yoff-30,Config_buff,BLACK,usBackColor);
+			yoff += 30;
+		}
+		
+		else if(Display.iConductivity[chl]>99000)
+		{
+			sprintf((char *)Config_buff,"TOC 	>99 ppb");
+			curFont->DrawText(xoff-40,yoff-30,Config_buff,BLACK,usBackColor);
+			yoff += 30;
+		}
+		else if(TOC_Exception == 1)
+		{
+			sprintf((char *)Config_buff,"TOC 	--"); //0
+			curFont->DrawText(xoff-40,yoff-30,Config_buff,BLACK,usBackColor);
+			yoff += 30;
+		}
+		else
+		{
+			Disp_Int2floatFormat_toc((Display.iConductivity[chl]+500)/1000,3,0,buf);//20161031  1000
+			sprintf((char *)Config_buff,"TOC	   %s ppb",buf);
+			curFont->DrawText(xoff-40,yoff-30,Config_buff,BLACK,usBackColor);
+			yoff += 30;
+		}
+	}
+	return yoff - iOrgYoff;
+
+#if 0
     char buf[16];
     u16 usBackColor = Display.usBackColor;
     int iOrgYoff = yoff;
@@ -1418,12 +1616,222 @@ int Disp_Sensors_Item(int chl,int big,int mask,int xoff,int yoff)
     return yoff - iOrgYoff;
 
     //usBackColor = Display.usBackColor;
+#endif
 
 }
+
+int Disp_Check_IsAlarm()
+{
+	if(Display.bit1PackCheck != TRUE
+	   &&Display.bit1UVCheck   != TRUE
+       &&Display.bit1FilterCheck != TRUE
+	   &&Display.aAlarm[DISP_ALARM_PRODUCT_RS].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_PRODUCT_RS1].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TEMPERATURE].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TEMPERATURE1].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TANK_EMPTY].bit1Fired != TRUE
+       &&Display.aAlarm[DISP_ALARM_TOC_PB].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TOC_B25].bit1Triggered != TRUE
+       &&Display.aAlarm[DISP_ALARM_TOC_VALUE].bit1Triggered != TRUE
+       &&DISPLAY_PAGE_QUANTITY_TAKING_WATER != Display.curPage.ucMain
+       &&DISPLAY_SUB_PAGE_QUANTITY_TAKING_WATER_SETTING != Display.curPage.ucSub)
+	{
+		return 0;
+	}
+	else 
+	{
+		return 1;
+	}
+}
+
 
 
 void Disp_Sensors(int xoff,int yoff,int mask4s)
 {
+	u8 ucC3State = FALSE;
+	int isAlarm; //判断是否有报警、耗材到期或定量取水
+		
+	if (DEV_TYPE_V1 != Display.cfg.cfg3.devtype)
+	{
+		return;
+	}
+	
+	if (DISPLAY_PAGE_USER_SET == Display.curPage.ucMain
+			|| DISPLAY_PAGE_ENG_SET == Display.curPage.ucMain)
+	{
+		return;
+	}
+	
+	if ((DISPLAY_STATE_CIRCULATION == Display.CurState.ucMain)
+		||(DISPLAY_STATE_NORMAL_TAKING_WATER == Display.CurState.ucMain)
+		||(DISPLAY_STATE_QUANTITY_TAKING_WATER == Display.CurState.ucMain))
+	{
+		ucC3State =  TRUE;
+	}
+	
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_PRODUCT_RS].bit1Fired)
+	{	
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_PRODUCT_RS].ulFireSec) >= DISP_ALARM_DURATION_TIME)
+		{
+			Display.aAlarm[DISP_ALARM_PRODUCT_RS].bit1Triggered = TRUE;
+		}
+	}
+	
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_PRODUCT_RS1].bit1Fired)
+	{	 
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_PRODUCT_RS1].ulFireSec) >= DISP_ALARM_DURATION_TIME)
+		{
+			Display.aAlarm[DISP_ALARM_PRODUCT_RS1].bit1Triggered = TRUE;
+		}
+	}
+		
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_TEMPERATURE].bit1Fired)
+	{
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_TEMPERATURE].ulFireSec) >= DISP_ALARM_DURATION_TIME)
+		{
+			Display.aAlarm[DISP_ALARM_TEMPERATURE].bit1Triggered = TRUE;
+		}
+	}
+	
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_TEMPERATURE1].bit1Fired)
+	{
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_TEMPERATURE1].ulFireSec) >= DISP_ALARM_DURATION_TIME)
+		{
+			Display.aAlarm[DISP_ALARM_TEMPERATURE1].bit1Triggered = TRUE;
+		}
+	}
+		
+#ifdef TOC
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_TOC_PB].bit1Fired)
+	{
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_TOC_PB].ulFireSec) >= DISP_TOC_ALARM_DURATION_TIME)
+		{
+			Display.aAlarm[DISP_ALARM_TOC_PB].bit1Triggered = TRUE; 
+		}
+	}
+		
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_TOC_B25].bit1Fired)
+	{
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_TOC_B25].ulFireSec) >= DISP_TOC_ALARM_DURATION_TIME)
+		{
+				//usBackColor = RED;
+			Display.aAlarm[DISP_ALARM_TOC_B25].bit1Triggered = TRUE;
+		}
+	}
+	if (ucC3State 
+		&& Display.aAlarm[DISP_ALARM_TOC_VALUE].bit1Fired)
+	{
+		if ((RTC_Get_Second() - Display.aAlarm[DISP_ALARM_TOC_VALUE].ulFireSec) >= DISP_TOC_ALARM_DURATION_TIME)
+		{
+			Display.aAlarm[DISP_ALARM_TOC_VALUE].bit1Triggered = TRUE;
+		}
+	}
+#endif
+	isAlarm = Disp_Check_IsAlarm();
+	
+	if(DISPLAY_STATE_TOC != Display.CurState.ucMain 
+		&& (isAlarm == 0 || 0 == Display.cfg.cfg2.TOC_SHOW))
+	{
+		int offset;
+		if (mask4s & (1 << DISPLAY_SENSOR_1))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_1,TRUE, 3,xoff,yoff);
+			yoff += (offset + 30);		 
+		}
+	
+#ifdef UF_FUNCTION
+		if (mask4s & (1 << DISPLAY_SENSOR_2))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 1,xoff,yoff);
+			yoff += offset; 		 
+		}
+#endif
+    
+#ifdef TOC
+		if (mask4s & (1 << DISPLAY_SENSOR_2))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 1,xoff,yoff);
+			yoff += offset; 	 
+		}
+		if (mask4s & (1 << DISPLAY_SENSOR_TOC))
+		{		
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_TOC,FALSE, 8,xoff,yoff); 
+			yoff += offset;
+		}
+#endif       
+	}
+	
+	else if(DISPLAY_STATE_TOC != Display.CurState.ucMain && isAlarm == 1)
+	{
+		int offset;
+		if (mask4s & (1 << DISPLAY_SENSOR_1))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_1,FALSE, 3,xoff,yoff);
+			yoff += (offset + 30);	 
+		}
+	
+#ifdef UF_FUNCTION
+		if (mask4s & (1 << DISPLAY_SENSOR_2))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 1,xoff,yoff);
+			yoff += offset; 		  
+		}
+#endif
+
+#ifdef TOC
+		if (mask4s & (1 << DISPLAY_SENSOR_2))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 1,xoff,yoff);
+			yoff += offset; 		  
+		}
+
+		if (mask4s & (1 << DISPLAY_SENSOR_TOC))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_TOC,FALSE, 8,xoff,yoff); 
+			yoff += offset;
+		}
+#endif       
+	}
+	
+	else
+	{
+		int offset;
+		if (mask4s & (1 << DISPLAY_SENSOR_1))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_1,FALSE, 3,xoff,yoff);
+			yoff += (offset + 30);
+		}
+	
+#ifdef UF_FUNCTION
+		if (mask4s & (1 << DISPLAY_SENSOR_2))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 3,xoff,yoff);
+			yoff += offset; 		  
+		}
+#endif        
+
+#ifdef TOC
+		if (mask4s & (1 << DISPLAY_SENSOR_2))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_2,FALSE, 1,xoff,yoff);
+			yoff += offset; 		  
+		}
+
+		if (mask4s & (1 << DISPLAY_SENSOR_TOC))
+		{
+			offset = Disp_Sensors_Item(DISPLAY_SENSOR_TOC,FALSE, 8,xoff,yoff);
+			yoff += offset;
+		}	
+#endif    
+	}
+
+#if 0
     u8 ucC3State = FALSE;
 
     if (DEV_TYPE_V1 != Display.cfg.cfg3.devtype)
@@ -1550,7 +1958,7 @@ void Disp_Sensors(int xoff,int yoff,int mask4s)
         }   
 #endif        
     }
-
+#endif
 }
 
 void Disp_UpdateIdlePage(int sensor)
@@ -3387,43 +3795,50 @@ void Disp_engSetDrawCellConstant(int iChl,int xoff,int yoff,u16 charColor,u16 bk
     
     Disp_Int2floatFormat(Display.cfg.cfg1.CELLCONSTANT[iChl],1,3,buf);
 
-    switch(Display.cfg.cfg1.language)
+	switch(Display.cfg.cfg1.language)
     {
     case DISP_LAN_ENGLISH:
 #ifdef UF_FUNCTION        
         if (0 == iChl )strcpy((char *)Config_buff,"CELL CONST.UP:");
         if (1 == iChl )strcpy((char *)Config_buff,"CELL CONST.DI:");
-#else
-        if (0 == iChl )strcpy((char *)Config_buff,"CELL CONST   :");
-#endif
-#ifdef TOC            
+		
+#elif defined TOC   
+		if (0 == iChl )strcpy((char *)Config_buff,"CELL CONST.UP:");
+        if (1 == iChl )strcpy((char *)Config_buff,"CELL CONST.DI:");
         if (2 == iChl) strcpy((char *)Config_buff,"CELL CONST.TOC:");
-#endif         
+#else
+		if (0 == iChl )strcpy((char *)Config_buff,"CELL CONST :");
+#endif       
         break;
+
     case DISP_LAN_GERMANY:
 #ifdef UF_FUNCTION        
         if (0 == iChl )strcpy((char *)Config_buff,"ZELL KONST.UP:");
         if (1 == iChl )strcpy((char *)Config_buff,"ZELL KONST.DI:");
-#else
-        if (0 == iChl )strcpy((char *)Config_buff,"ZELL KONST   :");
-#endif
-#ifdef TOC            
+#elif defined TOC
+        if (0 == iChl )strcpy((char *)Config_buff,"ZELL KONST.UP:");
+        if (1 == iChl )strcpy((char *)Config_buff,"ZELL KONST.DI:");
         if (2 == iChl) strcpy((char *)Config_buff,"ZELL CONST.TOC:");
-#endif         
+#else
+		if (0 == iChl )strcpy((char *)Config_buff,"ZELL KONST :");
+#endif  
+
         break;
+
     default:
 #ifdef UF_FUNCTION        
         if (0 == iChl )strcpy((char *)Config_buff,"电极常数.上  :");
         if (1 == iChl )strcpy((char *)Config_buff,"电极常数.下  :");
-#else
-        if (0 == iChl )strcpy((char *)Config_buff,"电极常数     :");
-#endif
-#ifdef TOC            
+
+#elif defined TOC  
+		if (0 == iChl )strcpy((char *)Config_buff,"电极常数.上  :");
+        if (1 == iChl )strcpy((char *)Config_buff,"电极常数.下  :"); 
         if (2 == iChl) strcpy((char *)Config_buff,"电极常数.TOC :");
-#endif         
+#else
+        if (0 == iChl )strcpy((char *)Config_buff,"电极常数   :");
+#endif     
         break;
     }
-    
 
     curFont->DrawText(xoff,yoff,Config_buff,charColor,bkColor);
 
@@ -3505,50 +3920,48 @@ void Disp_engSetDrawTempRange(int chl,int xoff,int yoff,u16 charColor,u16 bkColo
 {
     uint8_t pos[TEMP_RANGE_SET_NUMS] = TEMP_RANGE_SET_POS;
 
-    switch(Display.cfg.cfg1.language)
-    {
-    case DISP_LAN_ENGLISH:
-    case DISP_LAN_GERMANY:
-        if (charColor == LIGHTGREEN)
-        {
+	switch(Display.cfg.cfg1.language)
+	{
+	case DISP_LAN_ENGLISH:
 #ifdef UF_FUNCTION        
-            if (0 == chl) strcpy((char *)Config_buff,"TP.UP:");
-            if (1 == chl) strcpy((char *)Config_buff,"TP.DI:");
+		if (0 == iChl) strcpy((char *)Config_buff,"TEMP CONST.UP:");
+		if (1 == iChl) strcpy((char *)Config_buff,"TEMP CONST.DI:");
+		
+#elif defined TOC 
+		if (0 == iChl) strcpy((char *)Config_buff,"TEMP CONST.UP:");
+		if (1 == iChl) strcpy((char *)Config_buff,"TEMP CONST.DI:");
+		if (2 == iChl) strcpy((char *)Config_buff,"TEMP CONST.TOC:");
 #else
-            if (0 == chl) strcpy((char *)Config_buff,"TEMP:");
-#endif
-        }
-        else
-        {
+		if (0 == iChl) strcpy((char *)Config_buff,"TEMP CONST :");
+#endif 
+		break;
+	case DISP_LAN_GERMANY:
 #ifdef UF_FUNCTION        
-            if (0 == chl) strcpy((char *)Config_buff,"TEMP.S.P.UP:");
-            if (1 == chl) strcpy((char *)Config_buff,"TEMP.S.P.DI:");
+		if (0 == iChl) strcpy((char *)Config_buff,"TEMP KONST.UP:");
+		if (1 == iChl) strcpy((char *)Config_buff,"TEMP KONST.DI:");
+	
+#elif defined TOC   
+		if (0 == iChl) strcpy((char *)Config_buff,"TEMP KONST.UP:");
+		if (1 == iChl) strcpy((char *)Config_buff,"TEMP KONST.DI:");
+		if (2 == iChl) strcpy((char *)Config_buff,"TEMP CONST.TOC:");
 #else
-            if (0 == chl) strcpy((char *)Config_buff,"TEMP.S.P:");
-#endif
-        }
-        break;
-    default:
-        if (charColor == LIGHTGREEN)
-        {
+		if (0 == iChl) strcpy((char *)Config_buff,"TEMP KONST :");
+#endif         
+		break;
+
+	default:
 #ifdef UF_FUNCTION        
-            if (0 == chl) strcpy((char *)Config_buff,"温设.上:");
-            if (1 == chl) strcpy((char *)Config_buff,"温设.下:");
+		if (0 == iChl) strcpy((char *)Config_buff,"温补系数.上  :");
+		if (1 == iChl) strcpy((char *)Config_buff,"温补系数.下  :");
+#elif define TOC    
+		if (0 == iChl) strcpy((char *)Config_buff,"温补系数.上  :");
+		if (1 == iChl) strcpy((char *)Config_buff,"温补系数.下  :");
+		if (2 == iChl) strcpy((char *)Config_buff,"温补系数.TOC :");
 #else
-            if (0 == chl) strcpy((char *)Config_buff,"温度设定:");
-#endif
-        }
-        else
-        {
-#ifdef UF_FUNCTION        
-            if (0 == chl) strcpy((char *)Config_buff,"温度设定.上:");
-            if (1 == chl) strcpy((char *)Config_buff,"温度设定.下:");
-#else
-            if (0 == chl) strcpy((char *)Config_buff,"温度设定:");
-#endif
-        }
-        break;
-    }
+		if (0 == iChl) strcpy((char *)Config_buff,"温补系数   :");
+#endif         
+	break;
+	}
 
     curFont->DrawText(xoff,yoff,Config_buff,charColor,bkColor);
 
@@ -4240,13 +4653,16 @@ void Disp_KeyHandler_circular(int key,int state)
 
 void Disp_KeyHandler_toc(int key,int state)
 {
-    switch(Display.curPage.ucSub)
+	switch(Display.curPage.ucSub)
     {
     case DISPLAY_SUB_PAGE_IDLE:
+		Disp_KeyHandler_cir_idle(key,state);
         break;
     case DISPALY_SUB_PAGE_TOC_FLUSH:
+		Disp_KeyHandler_cir_idle(key,state);
         break;
     case DISPALY_SUB_PAGE_TOC_OXIDATION:
+		Disp_KeyHandler_cir_idle(key,state);
         break;
     }
 
@@ -5931,6 +6347,24 @@ void Disp_RemoteHandler_circular(int key,int data)
 
 }
 
+void Disp_RemoteHandler_toc(int key,int data)
+{
+    switch(Display.curPage.ucSub)
+    {
+    case DISPLAY_SUB_PAGE_IDLE:
+        Disp_RemoteHandler_cir_idle(key,data);
+        break;
+    case DISPALY_SUB_PAGE_TOC_FLUSH:
+		Disp_RemoteHandler_cir_idle(key,data); //20160929
+        break;
+    case DISPALY_SUB_PAGE_TOC_OXIDATION:
+		Disp_RemoteHandler_cir_idle(key,data);//20160929
+        break;
+    }
+
+}
+
+
 void Disp_RemoteHandler_ntw_idle(int key,int state)
 {
     switch(key)
@@ -6066,6 +6500,9 @@ void Disp_RemoteHandler(int key,int data)
     case DISPLAY_PAGE_DECOMPRESSION:
         Disp_RemoteHandler_dec(key,data);
         break;
+	case DISPLAY_PAGE_TOC:
+		Disp_RemoteHandler_toc(key,data);
+		break;
     }
 }
 
@@ -7458,7 +7895,7 @@ void Disp_Init(void)
                                                |(1<<DISPLAY_STATE_CIRCULATION)
                                                |(1<<DISPLAY_STATE_NORMAL_TAKING_WATER)
                                                |(1<<DISPLAY_STATE_QUANTITY_TAKING_WATER)
-                                               |(1<<DISPLAY_STATE_TOC)
+                                               |(0<<DISPLAY_STATE_TOC)
                                                |(1<<DISPLAY_STATE_DEGASS);
 
     Display.ucChlMask |= 1<<DISPLAY_SENSOR_1; 
@@ -7474,13 +7911,22 @@ void Disp_Init(void)
    Display.ucChlMask |= 1<<DISPLAY_SENSOR_2; 
 #endif
 
+
 #ifdef TOC
-    Display.ausSampleMask[DISPLAY_SENSOR_TOC] = (0<<DISPLAY_STATE_IDLE)
-                                               |(1<<DISPLAY_STATE_CIRCULATION)
+	Display.ausSampleMask[DISPLAY_SENSOR_2] =  (1<<DISPLAY_STATE_IDLE)
+                                               |(0<<DISPLAY_STATE_CIRCULATION)
                                                |(1<<DISPLAY_STATE_NORMAL_TAKING_WATER)
                                                |(1<<DISPLAY_STATE_QUANTITY_TAKING_WATER)
+                                               |(0<<DISPLAY_STATE_TOC)
+                                               |(0<<DISPLAY_STATE_DEGASS);
+	Display.ucChlMask |= 1<<DISPLAY_SENSOR_2; 
+   
+    Display.ausSampleMask[DISPLAY_SENSOR_TOC] = (0<<DISPLAY_STATE_IDLE)
+                                               |(0<<DISPLAY_STATE_CIRCULATION)
+                                               |(0<<DISPLAY_STATE_NORMAL_TAKING_WATER)
+                                               |(0<<DISPLAY_STATE_QUANTITY_TAKING_WATER)
                                                |(0<<DISPLAY_STATE_TOC) // leave to TOC proc
-                                               |(1<<DISPLAY_STATE_DEGASS);
+                                               |(0<<DISPLAY_STATE_DEGASS);
     Display.ucChlMask |= 1<<DISPLAY_SENSOR_TOC; 
 #endif
 

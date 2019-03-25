@@ -3,7 +3,7 @@
 ..\obj\ble.o: ..\USER\app_cfg.h
 ..\obj\ble.o: ..\USER\stm32f4xx.h
 ..\obj\ble.o: ..\CORE\core_cm4.h
-..\obj\ble.o: C:\Keil\ARM\ARMCC\bin\..\include\stdint.h
+..\obj\ble.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
 ..\obj\ble.o: ..\CORE\core_cmInstr.h
 ..\obj\ble.o: ..\CORE\core_cmFunc.h
 ..\obj\ble.o: ..\CORE\core_cm4_simd.h
@@ -40,7 +40,7 @@
 ..\obj\ble.o: ..\uCOS-II\Ports\os_cpu.h
 ..\obj\ble.o: ..\uCOS-II\uC-CPU\cpu.h
 ..\obj\ble.o: ..\uCOS-II\uC-CPU\cpu_def.h
-..\obj\ble.o: C:\Keil\ARM\ARMCC\bin\..\include\string.h
+..\obj\ble.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
 ..\obj\ble.o: ..\Utilities\VOS\memory.h
 ..\obj\ble.o: ..\Utilities\VOS\DtypeStm32.h
 ..\obj\ble.o: ..\Utilities\VOS\msg.h

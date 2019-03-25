@@ -3,7 +3,7 @@
 ..\obj\lcd.o: ..\USER\app_cfg.h
 ..\obj\lcd.o: ..\USER\stm32f4xx.h
 ..\obj\lcd.o: ..\CORE\core_cm4.h
-..\obj\lcd.o: C:\Keil\ARM\ARMCC\bin\..\include\stdint.h
+..\obj\lcd.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
 ..\obj\lcd.o: ..\CORE\core_cmInstr.h
 ..\obj\lcd.o: ..\CORE\core_cmFunc.h
 ..\obj\lcd.o: ..\CORE\core_cm4_simd.h
@@ -38,7 +38,7 @@
 ..\obj\lcd.o: ..\FWLIB\inc\stm32f4xx_fsmc.h
 ..\obj\lcd.o: ..\USER\os_cfg.h
 ..\obj\lcd.o: ..\uCOS-II\Ports\os_cpu.h
-..\obj\lcd.o: C:\Keil\ARM\ARMCC\bin\..\include\string.h
+..\obj\lcd.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
 ..\obj\lcd.o: ..\BSP\stm32_eval.h
 ..\obj\lcd.o: ..\Utilities\VOS\gpio.h
 ..\obj\lcd.o: ..\Utilities\VOS\voslog.h

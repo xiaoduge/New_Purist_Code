@@ -108,7 +108,6 @@ void App_TimeTickHook(void)
 #endif    
 }
 
-
 void InitKeys(void)
 {
     GPIO_KEY key;
@@ -138,7 +137,6 @@ void  MainInit (void)
    RCC_ClearFlag();
 
    VOS_SetLogLevel(VOS_LOG_DEBUG);
-   UartCmdSetLogLevel(VOS_LOG_DEBUG);  //20160612
 
    stm32_gpio_init();
 
@@ -193,10 +191,12 @@ void  MainInit (void)
 
     //mfd_EnableDebug(true);
 
-    mfd_Init(STM32F103_GPB(11),1);
+    mfd_Init(STM32F103_GPB(11),0);
 
     // ylf: start timers
     AddTimer(TIMER_CHECK_SECOND,OS_TMR_OPT_PERIODIC,OS_TICKS_PER_SEC,0xffff);
+
+    MainBeepWithDuration(1);    
 
     //AddTimer(TIMER_CHECK_KEY,OS_TMR_OPT_PERIODIC,(OS_TICKS_PER_SEC*10)/1000,0xffff); // 10ms
 
@@ -236,6 +236,9 @@ void SecondTimer(void)
 
     Disp_SecondTask();
 
+    bleSecondTask();
+
+
 }
 
 
@@ -252,6 +255,7 @@ UINT8 PidTimerProcess(Message *pMsg)
         Alarm(0);
         break;
     case TIMER_CHECK_BEEP:
+        Beep(0);
         break;
     case TIMER_CHECK_KEY:
         break;

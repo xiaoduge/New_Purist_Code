@@ -3,7 +3,7 @@
 ..\obj\modbus.o: ..\USER\app_cfg.h
 ..\obj\modbus.o: ..\USER\stm32f4xx.h
 ..\obj\modbus.o: ..\CORE\core_cm4.h
-..\obj\modbus.o: C:\Keil\ARM\ARMCC\bin\..\include\stdint.h
+..\obj\modbus.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
 ..\obj\modbus.o: ..\CORE\core_cmInstr.h
 ..\obj\modbus.o: ..\CORE\core_cmFunc.h
 ..\obj\modbus.o: ..\CORE\core_cm4_simd.h
@@ -38,8 +38,8 @@
 ..\obj\modbus.o: ..\FWLIB\inc\stm32f4xx_fsmc.h
 ..\obj\modbus.o: ..\USER\os_cfg.h
 ..\obj\modbus.o: ..\uCOS-II\Ports\os_cpu.h
-..\obj\modbus.o: C:\Keil\ARM\ARMCC\bin\..\include\string.h
-..\obj\modbus.o: C:\Keil\ARM\ARMCC\bin\..\include\stdio.h
+..\obj\modbus.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
+..\obj\modbus.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h
 ..\obj\modbus.o: ..\Utilities\VOS\memory.h
 ..\obj\modbus.o: ..\Utilities\VOS\DtypeStm32.h
 ..\obj\modbus.o: ..\Utilities\VOS\task.h
@@ -65,3 +65,4 @@
 ..\obj\modbus.o: adc.h
 ..\obj\modbus.o: ..\SYSTEM\sys\sys.h
 ..\obj\modbus.o: ad7799.h
+..\obj\modbus.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\math.h

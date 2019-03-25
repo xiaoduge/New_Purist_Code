@@ -1,4 +1,4 @@
---cpu Cortex-M4.fp
+--cpu=Cortex-M4.fp
 "..\obj\main.o"
 "..\obj\stm32f4xx_it.o"
 "..\obj\system_stm32f4xx.o"
@@ -17,6 +17,7 @@
 "..\obj\font.o"
 "..\obj\storage.o"
 "..\obj\ble.o"
+"..\obj\tocdata.o"
 "..\obj\startup_stm32f40_41xxx.o"
 "..\obj\misc.o"
 "..\obj\stm32f4xx_gpio.o"
@@ -39,6 +40,6 @@
 "..\LIB\STM32F4xxlib.lib"
 "..\LIB\0860210008WDMBUSERLIB.lib"
 --library_type=microlib --strict --scatter "..\stm32f4xx_norm.sct"
---summary_stderr --info summarysizes --map --xref --callgraph --symbols
+--summary_stderr --info summarysizes --map --load_addr_map_info --xref --callgraph --symbols
 --info sizes --info totals --info unused --info veneers
 --list "..\Obj\0860210008WDMB_Main_V_1_0.map" -o ..\Obj\0860210008WDMB_Main_V_1_0.axf

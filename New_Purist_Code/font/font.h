@@ -1,5 +1,7 @@
 #ifndef __FONT_H
-#define __FONT_H		
+#define __FONT_H	
+
+#define CODEGB_48
 
 typedef struct  typFNT_GB33                           // 汉字字模数据结构 
 {

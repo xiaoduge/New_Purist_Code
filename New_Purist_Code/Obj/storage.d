@@ -1,10 +1,10 @@
 ..\obj\storage.o: storage.c
-..\obj\storage.o: C:\Keil\ARM\ARMCC\bin\..\include\string.h
+..\obj\storage.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
 ..\obj\storage.o: Display.h
 ..\obj\storage.o: ..\BSP\stm32_eval.h
 ..\obj\storage.o: ..\USER\stm32f4xx.h
 ..\obj\storage.o: ..\CORE\core_cm4.h
-..\obj\storage.o: C:\Keil\ARM\ARMCC\bin\..\include\stdint.h
+..\obj\storage.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
 ..\obj\storage.o: ..\CORE\core_cmInstr.h
 ..\obj\storage.o: ..\CORE\core_cmFunc.h
 ..\obj\storage.o: ..\CORE\core_cm4_simd.h
@@ -63,4 +63,4 @@
 ..\obj\storage.o: ..\FATFS\src\ff.h
 ..\obj\storage.o: ..\FATFS\src\integer.h
 ..\obj\storage.o: ..\FATFS\src\ffconf.h
-..\obj\storage.o: C:\Keil\ARM\ARMCC\bin\..\include\stdio.h
+..\obj\storage.o: D:\Keil_v5\ARM\ARMCC\Bin\..\include\stdio.h

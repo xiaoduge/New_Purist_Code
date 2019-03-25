@@ -3,6 +3,7 @@
 
 #define TOC
 //#define UF_FUNCTION
+#define TEMP_VALIDATE //validate
 
 
 #include "stm32_eval.h"
@@ -254,6 +255,11 @@ typedef enum
     DISP_ALARM_PRODUCT_RS1,
     DISP_ALARM_TEMPERATURE,
     DISP_ALARM_TEMPERATURE1,
+#ifdef TOC
+    DISP_ALARM_TOC_PB,    //
+    DISP_ALARM_TOC_B25,   //
+    DISP_ALARM_TOC_VALUE, // 
+#endif
     DISP_ALARM_TANK_EMPTY,
     DISP_ALARM_NUM,
 }DISP_ALARM_ENUM;
@@ -298,6 +304,7 @@ typedef enum
     DISP_US_ITEM_FEED_QUALITY,
     // end add for v2
 #endif    
+	DISP_US_ITEM_FEED_KEY,
     DISP_US_ITEM_SERIAL_NO,
     DISP_US_ITEM_NUM,    
 }DISP_US_ITEM_ENUM;
@@ -305,30 +312,41 @@ typedef enum
 typedef enum
 {
     DISP_ES_ITEM_CELL_CONSTANT1 = 0,
-    DISP_ES_ITEM_TEMP_CONSTANT1,
+    DISP_ES_ITEM_TEMP_CONSTANT1, 
+    
 #ifdef UF_FUNCTION        
-    DISP_ES_ITEM_CELL_CONSTANT2,
-#endif    
-#ifdef UF_FUNCTION    
+    DISP_ES_ITEM_CELL_CONSTANT2,  
     DISP_ES_ITEM_TEMP_CONSTANT2,
 #endif    
-#ifdef TOC    
+
+#ifdef TOC  
+	DISP_ES_ITEM_CELL_CONSTANT2,
+	DISP_ES_ITEM_TEMP_CONSTANT2,
+	
     DISP_ES_ITEM_CELL_CONSTANT3,
-#endif
-#ifdef TOC    
     DISP_ES_ITEM_TEMP_CONSTANT3,
-#endif    
+#endif   
+
     DISP_ES_ITEM_TEMP_RANGE1,
 #ifdef UF_FUNCTION        
     // begin add for v2
     DISP_ES_ITEM_TEMP_RANGE2,
-#endif    
+#endif 
+#ifdef TOC        
+		// begin add for v2
+	DISP_ES_ITEM_TEMP_RANGE2,
+#endif 
+
     // end add for v2
     DISP_ES_ITEM_PRODUCT_RS1,
     // begin add for v2
 #ifdef UF_FUNCTION        
     DISP_ES_ITEM_PRODUCT_RS2,
-#endif    
+#endif  
+#ifdef TOC        
+	DISP_ES_ITEM_PRODUCT_RS2,
+#endif 
+
     // end add for v2
     DISP_ES_ITEM_PACK,
     DISP_ES_ITEM_FILTER,
@@ -413,6 +431,8 @@ typedef struct
 
     int iConductivity[DISPLAY_MAX_SENSOR]; // decimal 3
     int iTemperature [DISPLAY_MAX_SENSOR] ; // decimal 3
+
+	float iToc;
 
     int  aulBestCdt[DISPLAY_MAX_SENSOR];
 

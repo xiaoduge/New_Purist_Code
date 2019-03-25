@@ -32,8 +32,10 @@ const uint8_t relays[RELAY_NUMBER] = {
 
 const uint8_t aRelayDefaults[RELAY_NUMBER] = 
 {
-    1,1,1,0,0,0,0,0,0,1,
+    1,1,1,1,1,1,1,1,1,1,
 };
+
+const uint16_t RelayInvertMask = 0x1F8;
 
 RELAY_PULSE_STRU aPulseCtrl[RELAY_NUMBER];
 
@@ -56,15 +58,28 @@ void InitRelays(void)
 
 void RelayLogicCtrl(UINT8 ucChannel,UINT8 ucEnable)
 {
-    
-    stm32_gpio_set_value(relays[ucChannel],ucEnable); // ylf:  inactive low
+    if (RelayInvertMask & (1 << ucChannel))
+    {
+        stm32_gpio_set_value(relays[ucChannel],!ucEnable); // ylf:  inactive low
+    }
+    else
+    {
+        stm32_gpio_set_value(relays[ucChannel],ucEnable); // ylf:  inactive low
+    }
 
 }
 
 UINT8 GetRelayLogicStatus(UINT8 ucChannel)
 {
 
-    return stm32_gpio_get_value(relays[ucChannel]);
+    if (RelayInvertMask & (1 << ucChannel))
+    {
+        return !stm32_gpio_get_value(relays[ucChannel]);
+    }
+    else
+    {
+        return stm32_gpio_get_value(relays[ucChannel]);
+    }
 
 }
 

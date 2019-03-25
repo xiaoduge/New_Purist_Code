@@ -116,7 +116,7 @@ typedef enum
 
 #define ALARM_SUPPORT 1
 
-#define BEEP_SUPPORT 0
+#define BEEP_SUPPORT 1
 
 #define RUN_SUPPORT 1
 

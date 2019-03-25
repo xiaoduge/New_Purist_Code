@@ -63,11 +63,13 @@ typedef void (*halBLECBack_t) (uint8 port, uint8 event);
 typedef struct
 {
     halBLECBack_t cb;
+
+    uint8_t ucReset;
 }BLE_STUR;
 
 static SERIAL_BUS_PARSER  SerBusParser;
 
-//static BLE_STUR sBle;
+static BLE_STUR sBle;
 
 
 void ble_Serial_InitParser(void)
@@ -186,9 +188,9 @@ void bleReset(void)
     //Disp_zbResetInd();
 }
 
-void ble_PrepareReset()
+void ble_Init()
 {
-
+    memset(&sBle,0,sizeof(sBle));
 }
 
 void ble_config_cb(uint8_t ucPort)
@@ -219,13 +221,24 @@ void ble_config_cb(uint8_t ucPort)
 
 void ble_SappProc(uint8_t *pucData,uint8_t len)
 {
-    uint8_t ucRet;
+    uint8_t ucRet = 0;
+    
+    uint8_t ucRspLen = 1;
 
     switch(pucData[RPC_POS_CMD1])
     {
+    case SAPP_CMD_RESET:
+        {
+            sBle.ucReset = 2;
+            
+            sbTxBuf[RPC_POS_LEN]  = ucRspLen; // len for data area (NOT INCLUDE CMD0&CMD1&LEN itself)
+            sbTxBuf[RPC_POS_CMD0] = sbRxBuf[RPC_POS_CMD0];
+            sbTxBuf[RPC_POS_CMD1] = sbRxBuf[RPC_POS_CMD1]|SAPP_RSP_MASK;
+            sbTxBuf[RPC_POS_DAT0] = ucRet; // state
+        }
+        break;
     case SAPP_CMD_DATA:
         {
-            uint8_t ucRspLen = 1;
             
             /* skip protol */
             sbRxBuf[RPC_POS_LEN]  = pucData[RPC_POS_LEN];
@@ -243,6 +256,23 @@ void ble_SappProc(uint8_t *pucData,uint8_t len)
 
         }
         break;
+    case SAPP_CMD_CFG:
+        {
+            sbRxBuf[RPC_POS_LEN]  = pucData[RPC_POS_LEN];
+            sbRxBuf[RPC_POS_CMD0] = pucData[RPC_POS_CMD0];
+            sbRxBuf[RPC_POS_CMD1] = pucData[RPC_POS_CMD1];
+
+            memcpy(&sbRxBuf[RPC_POS_DAT0],pucData + RPC_POS_DAT0,len - RPC_FRAME_HDR_SZ);
+            
+            ucRet = Config_Sapp_Entry(&sbRxBuf[RPC_POS_DAT0],&sbTxBuf[SAPP_RSP_STATUS+1],SAPP_PAYLOAD_LEN(sbLen),&ucRspLen);
+
+            sbTxBuf[RPC_POS_LEN] = ucRspLen; // len for data area (NOT INCLUDE CMD0&CMD1&LEN itself)
+            sbTxBuf[RPC_POS_CMD0] = sbRxBuf[RPC_POS_CMD0];
+            sbTxBuf[RPC_POS_CMD1] = sbRxBuf[RPC_POS_CMD1]|SAPP_RSP_MASK;
+            sbTxBuf[RPC_POS_DAT0] = ucRet; // state
+        
+        }
+        break;
     case (SAPP_CMD_AT | 0X80):
         {
             /* 2017/06 ADD for changing BLE Name */
@@ -253,13 +283,20 @@ void ble_SappProc(uint8_t *pucData,uint8_t len)
         break;
     }
 
-    ble_SerialResp();		
-    
-    (void )ucRet;
+    ble_SerialResp();	
+
 }
 
 void bleSecondTask(void)
 {
+    if (sBle.ucReset)
+    {
+        sBle.ucReset--;
+        if (0 == sBle.ucReset)
+        {
+           NVIC_SystemReset(); 
+        }
+    }
 }
 
 void bleCmdSerialWrite(uint8 ucCmd,uint8 *pBuffer, uint16 length)
@@ -309,6 +346,6 @@ void bleInit(void)
    //sys_timeout(1000,SYS_TIMER_PERIOD,1000,Modbus_Scheduler_cb,NULL,&ModbusSheduler.to4Schedule); 
    ble_Serial_InitParser();
 
-   ble_PrepareReset();
+   ble_Init();
 }
 
