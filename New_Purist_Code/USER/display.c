@@ -1128,7 +1128,7 @@ void Disp_Calc_TocValue(float value, int iChl)
 
 			Display.iToc *= Display.cfg.cfg1.CELLCONSTANT[2];
 
-			memset(&tocValues, 0, sizeof(TocData)); //計算完成后清零
+			memset(&tocValues, 0, sizeof(TocValues)); //計算完成后清零
 			isInit = 0;
 			samplesNum = 0;
 
@@ -1689,7 +1689,7 @@ int Disp_Sensors_Item(int chl,int big,int mask,int xoff,int yoff)
 	u16 usBackColor = Display.usBackColor;
 	int iOrgYoff = yoff;
 
-	LCD_Clear(Display.usBackColor); //清屏
+	//LCD_Clear(Display.usBackColor); //清屏
 	
 	if (mask & 0x1)
 	{
@@ -1830,11 +1830,12 @@ int Disp_Sensors_Item(int chl,int big,int mask,int xoff,int yoff)
 	if (mask & 0x2)
 	{
 		Disp_Int2floatFormat((Display.iTemperature[chl] + 50)/100,1,1,buf);
+
 		switch(Display.cfg.cfg1.language)
 		{
 		case DISP_LAN_ENGLISH:
-			sprintf((char *)Config_buff,"Temp.  %s℃",buf);
-			break;
+            sprintf((char *)Config_buff,"Temp.  %s℃",buf);
+			break;    
 		case DISP_LAN_GERMANY:
 			sprintf((char *)Config_buff,"Temp.  %s℃",buf);
 			break;
@@ -1844,9 +1845,13 @@ int Disp_Sensors_Item(int chl,int big,int mask,int xoff,int yoff)
 		}
 #ifdef CODEGB_48 
 		if(DISPLAY_STATE_TOC != Display.CurState.ucMain && big == TRUE)
+        {      
 			curFont->DrawText(xoff-140,yoff,Config_buff,BLACK,usBackColor);
+        }
 		else
+        {      
 			curFont->DrawText(xoff-90,yoff,Config_buff,BLACK,usBackColor);
+        }
 #else
 		curFont->DrawText(xoff-90,yoff,Config_buff,BLACK,usBackColor);
 #endif  

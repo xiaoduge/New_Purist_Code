@@ -138,7 +138,7 @@ unsigned char RD_mode;
 #define SAFE
 const float maxG25 = 18.2;
 const float safePar = 1.05;
-#define B3950
+//#define B3950
 
 
 

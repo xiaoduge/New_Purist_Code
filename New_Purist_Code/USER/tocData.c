@@ -80,7 +80,7 @@ void addTocValue(TocValues* TocValues, double value)
 	TocValues->a[TocValues->cursor] = value;
 	TocValues->cursor++;
 
-	if(D_VALUESNUM == TocValues->total++)
+	if(D_VALUESNUM == TocValues->total)
 	{
 		calcTargetValue(TocValues);
 	}
@@ -102,10 +102,7 @@ void calcTargetValue(TocValues* TocValues)
 	
 	if(TocValues->value > temp)
 	{
-		if(checkValuesDiff(TocValues))
-		{
-			TocValues->value = temp;
-		}
+        TocValues->value = temp; 
 	}
 
 }
@@ -128,11 +125,8 @@ BOOL checkValuesDiff(TocValues* TocValues)
 	}
 
 	double diff = max - min;
-	if(diff > 1.0)
-	{
-		return FALSE;
-	}
-	return TRUE;
+    
+    return diff > 1.0 ? FALSE : TRUE;
 
 }
 

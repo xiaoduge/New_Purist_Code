@@ -14,6 +14,7 @@ typedef struct
 	int isFull;
 }TocData;
 
+
 /************************************************
 *Description: TOC calculation new algorithm data structure
 *date: 2019.03.25
@@ -40,8 +41,6 @@ double calcValue(TocData datas);
 void addTocValue(TocValues* TocValues, double value);
 void calcTargetValue(TocValues* TocValues);
 BOOL checkValuesDiff(TocValues* TocValues);
-
-
 
 #endif
 
