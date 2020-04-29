@@ -1,3 +1,0 @@
----- DISP_LCD_DORMANT_TIME Matches (2 in 1 files) ----
-display.c (E:\Project_NewPurist\baseos\baseos\USER) line 129 : #define DISP_LCD_DORMANT_TIME (3*60)
-Disp_SecondTask in display.c (E:\Project_NewPurist\baseos\baseos\USER) :             if (Display.usIdleLcdTimes >= DISP_LCD_DORMANT_TIME)

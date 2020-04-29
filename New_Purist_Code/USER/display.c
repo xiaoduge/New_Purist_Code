@@ -1804,7 +1804,7 @@ int Disp_Sensors_Item(int chl,int big,int mask,int xoff,int yoff)
 		}
 		else
 		{
-			sprintf((char *)Config_buff,"%s",UNIT_TYPE_1);
+			sprintf((char *)Config_buff,"%s    ",UNIT_TYPE_1);
 		}
 		
 		if (DISPLAY_SENSOR_1 == chl)
