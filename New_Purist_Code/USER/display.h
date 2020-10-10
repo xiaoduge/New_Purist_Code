@@ -2,6 +2,7 @@
 #define _DISPLAY_H_
 
 #define TOC
+#define TOC_APP
 //#define UF_FUNCTION
 #define TEMP_VALIDATE //validate
 
