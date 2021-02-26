@@ -1759,6 +1759,10 @@ int Disp_Sensors_Item(int chl,int big,int mask,int xoff,int yoff)
 		else if(1 == Display.cfg.cfg2.UNIT && DISPLAY_SENSOR_1 == chl)
 		{
 			uint32_t fus = (1000*1000)/Display.iConductivity[chl];
+			if(fus < 55)
+			{
+				fus = 55;
+			}
 			Disp_Int2floatFormat(fus,1,3,buf);
 			sprintf((char *)Config_buff,"%s",buf);
 		}
@@ -3975,7 +3979,7 @@ void Disp_UserUpdate4FeedQuality(void)
     Disp_userSetDrawFeedQuality(Display.usX4FeedQuality,Display.usY4FeedQuality,Display.usCharColor4FeedQuality,Display.usBackColor4FeedQuality);    
 }
 
-void Disp_UserSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffset)
+void Disp_UserSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffset,uint8_t bInitTime)
 {
 //20170516
     int xoff = 10;   
@@ -3988,7 +3992,10 @@ void Disp_UserSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffse
 
     RTC_Get();
 
-    stimer4Us = timer;
+    if (!Display.bit1SetTime)
+    {
+        stimer4Us = timer;
+    }
 
     LCD_Clear(WHITE);
 
@@ -4011,33 +4018,33 @@ void Disp_UserSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffse
         case DISP_US_ITEM_PACK:
              if (DEV_TYPE_V1 == Display.cfg.cfg3.devtype)
              {
-                 Disp_userSetDrawPack(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
+                 if (!bInitTime) Disp_userSetDrawPack(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
                  Display.aucSetLine[ucItems++] = DISP_US_ITEM_PACK;
                  yoff += 24;
              }           
              break;
          case DISP_US_ITEM_FILTER:
-             Disp_userSetDrawFilter(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
+             if (!bInitTime) Disp_userSetDrawFilter(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
              Display.aucSetLine[ucItems++] = DISP_US_ITEM_FILTER;
              yoff += 24;
              break;
          case DISP_US_ITEM_UV:
              if (DEV_TYPE_V1 == Display.cfg.cfg3.devtype)
              {
-                Disp_userSetDrawUV(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
+                if (!bInitTime) Disp_userSetDrawUV(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
                 Display.aucSetLine[ucItems++] = DISP_US_ITEM_UV;
                 yoff += 24;
              }
              break;
          case DISP_US_ITEM_FLOW:
-             Disp_userSetDrawFlow(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
+             if (!bInitTime) Disp_userSetDrawFlow(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
              Display.aucSetLine[ucItems++] = DISP_US_ITEM_FLOW;
              yoff += 24;
              break;
          case DISP_US_ITEM_UNIT:
              if (DEV_TYPE_V1 == Display.cfg.cfg3.devtype)
              {
-                 Disp_userSetDrawUnit(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
+                 if (!bInitTime) Disp_userSetDrawUnit(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
                  Display.aucSetLine[ucItems++] = DISP_US_ITEM_UNIT;
                  yoff += 24;
              }
@@ -4050,23 +4057,23 @@ void Disp_UserSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffse
              break;
 #endif             
          case DISP_US_ITEM_LANGUAGE:
-             Disp_userSetDrawLanguage(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
+             if (!bInitTime) Disp_userSetDrawLanguage(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
              Display.aucSetLine[ucItems++] = DISP_US_ITEM_LANGUAGE;
              yoff += 24;
              break;
 #ifdef UF_FUNCTION             
          case DISP_US_ITEM_UF_CLEAN:
-             Disp_userSetDrawUFWash(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
+             if (!bInitTime) Disp_userSetDrawUFWash(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
              Display.aucSetLine[ucItems++] = DISP_US_ITEM_UF_CLEAN;
              yoff += 24;
              break;
          case DISP_US_ITEM_UF_FLUSH:
-             Disp_userSetDrawFlush(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
+             if (!bInitTime) Disp_userSetDrawFlush(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
              Display.aucSetLine[ucItems++] = DISP_US_ITEM_UF_FLUSH;
              yoff += 24;
              break;
          case DISP_US_ITEM_FEED_QUALITY:
-             Disp_userSetDrawFeedQuality(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
+             if (!bInitTime) Disp_userSetDrawFeedQuality(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
              Display.aucSetLine[ucItems++] = DISP_US_ITEM_FEED_QUALITY;
              yoff += 24;
              break;
@@ -4074,7 +4081,7 @@ void Disp_UserSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffse
          case DISP_US_ITEM_FEED_KEY:
 		 	 if (DEV_TYPE_V1 == Display.cfg.cfg3.devtype)
 		 	 {
-                Disp_userSetDrawFeed_Key(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
+                if (!bInitTime) Disp_userSetDrawFeed_Key(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
                 Display.aucSetLine[ucItems++] = DISP_US_ITEM_FEED_KEY;
                 yoff += 24;
                 
@@ -4082,7 +4089,7 @@ void Disp_UserSetInitPage(uint8_t ucCurLine,uint8_t ucCurCol,uint8_t ucLineOffse
 			break;
 			 
          case DISP_US_ITEM_SERIAL_NO:
-             Disp_userSetDrawSerialNo(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
+             if (!bInitTime) Disp_userSetDrawSerialNo(xoff,yoff,HIGH_LIGHTING(ucLineIdx,ucCurLine),Display.usBackColor4Set);
              Display.aucSetLine[ucItems++] = DISP_US_ITEM_SERIAL_NO;
              yoff += 24;
              break;
@@ -4096,7 +4103,7 @@ void Disp_Move2UserSet(void)
 {
     Disp_Move2DstPage();
 
-    Disp_UserSetInitPage(0,0XFF,0);
+    Disp_UserSetInitPage(0,0XFF,0,0);
 }
 
 
@@ -4105,6 +4112,60 @@ void Disp_Prepare4UserSet(void)
     Display.tgtPage.ucMain = DISPLAY_PAGE_USER_SET;
     Display.tgtPage.ucSub  = DISPLAY_SUB_PAGE_IDLE;
     Disp_Move2UserSet();
+}
+
+void Disp_Prepare4InitTimeUserSet()
+{
+    Display.tgtPage.ucMain = DISPLAY_PAGE_USER_SET;
+    Display.tgtPage.ucSub  = DISPLAY_SUB_PAGE_US_SET_INIT_TIME;
+
+    Disp_Move2DstPage();
+
+    Disp_UserSetInitPage(DISP_US_ITEM_TIME,0XFF,0,TRUE);
+
+    // add Tip info
+    {
+        int xoff = 5;
+        int yoff = 5;
+
+        switch(Display.cfg.cfg1.language)
+        {
+        case DISP_LAN_CHINESE:
+            sprintf((char *)Config_buff,"用'+'键移动光标");
+            break;
+        default:
+            sprintf((char *)Config_buff,"Key '+' to Move Cursor");
+            break;
+        }
+        curFont->DrawText(xoff,yoff,Config_buff,Display.usForColor,Display.usBackColor4Set);
+        yoff += 24;
+
+        switch(Display.cfg.cfg1.language)
+        {
+        case DISP_LAN_CHINESE:
+            sprintf((char *)Config_buff,"用'-'键修改数字");
+            break;
+        default:
+            sprintf((char *)Config_buff,"Key '-' to Change Number");
+            break;
+        }
+        curFont->DrawText(xoff,yoff,Config_buff,Display.usForColor,Display.usBackColor4Set);
+        yoff += 24;
+
+        switch(Display.cfg.cfg1.language)
+        {
+        case DISP_LAN_CHINESE:
+            sprintf((char *)Config_buff,"用'鬼'键保存");
+            break;
+        default:
+            sprintf((char *)Config_buff,"Key '鬼' to Save");
+            break;
+        }
+        curFont->DrawText(xoff,yoff,Config_buff,Display.usForColor,Display.usBackColor4Set);
+        yoff += 24;        
+
+    }
+
 }
 
 void Disp_engSetDrawCellConstant(int iChl,int xoff,int yoff,u16 charColor,u16 bkColor)
@@ -5196,14 +5257,14 @@ void Disp_Us_ChangeSel(void)
     // calc Move Display Page
     if (Display.ucCurLine + 1 + Display.ucLineOffset >= DISP_US_ITEM_NUM)
     {
-        Disp_UserSetInitPage(0,0XFF,0);
+        Disp_UserSetInitPage(0,0XFF,0,0);
         return;
     }
 
     if (Display.ucCurLine + 1 >= DISPLAY_MAX_LINE_PER_PAGE)
     {
         Display.ucLineOffset += DISPLAY_MAX_LINE_PER_PAGE;
-        Disp_UserSetInitPage(0,0XFF,Display.ucLineOffset);
+        Disp_UserSetInitPage(0,0XFF,Display.ucLineOffset,0);
         return;
     }
     
@@ -5745,7 +5806,7 @@ void Disp_Us_Set(int key)
     case DISP_US_ITEM_LANGUAGE:
         {
             Disp_UserSetSetLanguage(key);
-            Disp_UserSetInitPage(Display.ucCurLine,Display.ucCurCol,Display.ucLineOffset);        
+            Disp_UserSetInitPage(Display.ucCurLine,Display.ucCurCol,Display.ucLineOffset,0);        
         }
         break;
     case DISP_US_ITEM_UNIT:
@@ -5816,21 +5877,28 @@ void Disp_CommSetSaveConfig(void)
 
 void Disp_Us_SetSaveConfig(void)
 {
-   Disp_CommSetSaveConfig();
+    Disp_CommSetSaveConfig();
 
-   // for US specific settings
-   if (Display.bit1SetTime)
-   {
-       Display.bit1SetTime = FALSE;
+    // for US specific settings
+    if (Display.bit1SetTime)
+    {
+        Display.bit1SetTime = FALSE;
 
-       RTC_Set(stimer4Us.w_year,stimer4Us.w_month,stimer4Us.w_date,stimer4Us.hour,stimer4Us.min,stimer4Us.sec);
-   }
+		/* Allow access to BKP Domain */
+        PWR_BackupAccessCmd(ENABLE);
 
-   {
-       Disp_WriteInfo();
+        RTC_Set(stimer4Us.w_year,stimer4Us.w_month,stimer4Us.w_date,stimer4Us.hour,stimer4Us.min,stimer4Us.sec);
+		RTC_Set(stimer4Us.w_year,stimer4Us.w_month,stimer4Us.w_date,stimer4Us.hour,stimer4Us.min,stimer4Us.sec);
 
-       Disp_CheckConsumptiveMaterialState();
-   }   
+		RTC_Get();
+
+    }
+
+    {
+        Disp_WriteInfo();
+
+        Disp_CheckConsumptiveMaterialState();
+    }   
 }
 
 
@@ -5976,6 +6044,41 @@ void Disp_KeyHandler_us_idle(int key,int state)
 
 }
 
+void Disp_KeyHandler_us_init_time(int key,int state)
+{
+    switch(key)
+    {
+    case KEY_CODE_SET_K4:
+        if (KEYSTATE_PRESSED == state)
+        {
+            Disp_Us_Set(key);
+        }
+        break;
+    case KEY_CODE_RECURSIVE_K2:
+        {
+            if (KEYSTATE_PRESSED == state)
+            {
+                Disp_Us_Set(key);
+            }
+        }
+        break;
+    case KEY_CODE_QUANTITY_K3:
+        {
+            if (KEYSTATE_PRESSED == state)
+            {
+                Disp_Us_SetSaveConfig();
+                RTC_Get();
+                
+                Disp_PrepareMove2Idle();
+            }
+        }
+        break;        
+    default:
+        break;
+    }
+
+}
+
 
 void Disp_KeyHandler_us(int key,int state)
 {
@@ -5983,6 +6086,9 @@ void Disp_KeyHandler_us(int key,int state)
     {
     case DISPLAY_SUB_PAGE_IDLE:
         Disp_KeyHandler_us_idle(key,state);
+        break;
+    case DISPLAY_SUB_PAGE_US_SET_INIT_TIME:
+        Disp_KeyHandler_us_init_time(key,state);
         break;
     default:
         break;
@@ -7350,7 +7456,17 @@ void Disp_SecondTask(void)
         if (0 == Display.ucDspWelcomeTime)
         {
             Disp_CheckConsumptiveMaterialState();
-        
+
+            if (2000 == stimer.w_year )
+            {
+                if (Display.curPage.ucMain != DISPLAY_PAGE_USER_SET
+                    &&Display.curPage.ucSub !=  DISPLAY_SUB_PAGE_US_SET_INIT_TIME) 
+                {
+                    Disp_Prepare4InitTimeUserSet();
+                }
+                return;
+            }
+                    
             Disp_DisplayIdlePage();
         }
 #ifdef UF_FUNCTION
@@ -7362,6 +7478,16 @@ void Disp_SecondTask(void)
     }
     else
     {
+        if (2000 == timer.w_year)
+        {
+            if (Display.curPage.ucMain != DISPLAY_PAGE_USER_SET
+                &&Display.curPage.ucSub !=  DISPLAY_SUB_PAGE_US_SET_INIT_TIME) 
+            {
+                Disp_Prepare4InitTimeUserSet();
+            }
+            return;
+        }
+
         // read sensors periodcally
         Display.usSeconds++;
 

@@ -34,7 +34,7 @@ const char DataStr[]=__DATE__;
 const char TimeStr[]=__TIME__; 
 
 //const char version[] = {"STM32F407_WDMB_V1.0"};
-const char version[] = {"0.1.2.200424_WRW960"};
+const char version[] = {"0.1.3.210225_WRW960"};
 
 uint16_t gusDeviceId;
 
